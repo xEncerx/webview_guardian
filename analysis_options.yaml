@@ -1,0 +1,22 @@
+include: package:very_good_analysis/analysis_options.10.2.0.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.gr.dart"
+    - "**/*.freezed.dart"
+    - "**/*.mocks.dart"
+    - "packages/**/build/**"
+    - "build/**"
+
+formatter:
+  page_width: 100
+
+linter:
+  rules:
+    lines_longer_than_80_chars: false
+    one_member_abstracts: false
+    dangling_library_doc_comments: false
+    avoid_positional_boolean_parameters: false
+    flutter_style_todos: false
+    document_ignores: false
