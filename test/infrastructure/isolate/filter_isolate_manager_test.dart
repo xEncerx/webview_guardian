@@ -63,14 +63,38 @@ example.com##.banner-ad
       expect(errors, isEmpty);
       expect(engine.cosmeticHideRules.containsKey('example.com'), isTrue);
 
-      final engineFile = File('${tempDir.path}/compiled_filter_engine.bin');
+      final engineFile = File('${tempDir.path}/adblocker/compiled_filter_engine.bin');
       expect(engineFile.existsSync(), isTrue, reason: 'Engine file should be written to disk');
 
-      final filterListsDir = Directory('${tempDir.path}/filter_lists');
+      final filterListsDir = Directory('${tempDir.path}/adblocker/filter_lists');
       expect(filterListsDir.existsSync(), isTrue);
       expect(filterListsDir.listSync().isNotEmpty, isTrue);
 
       manager.dispose();
+    });
+
+    test('runBuildJob should complete and release the worker for the next job', () async {
+      final engines = <CompiledFilterEngine>[];
+      final manager = FilterIsolateManager(
+        onEngineReady: (engine, _, _, _) => engines.add(engine),
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      await manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+      await manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      expect(engines, hasLength(2));
     });
 
     test('should restore engine from cache on second run (Cold Start Cache Hit)', () async {
@@ -265,8 +289,8 @@ example.com##.banner-ad
 
       await completer.future.timeout(const Duration(seconds: 5));
 
-      final engineFile = File('${tempDir.path}/compiled_filter_engine.bin');
-      final filterListsDir = Directory('${tempDir.path}/filter_lists');
+      final engineFile = File('${tempDir.path}/adblocker/compiled_filter_engine.bin');
+      final filterListsDir = Directory('${tempDir.path}/adblocker/filter_lists');
 
       expect(engineFile.existsSync(), isTrue);
       expect(filterListsDir.existsSync(), isTrue);

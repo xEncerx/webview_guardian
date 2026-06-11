@@ -14,11 +14,18 @@ import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 class AdblockService {
   /// Creates an [AdblockService] instance.
   AdblockService() : _useForTesting = false;
-  AdblockService._forTest() : _useForTesting = true;
+  AdblockService._forTest({FilterJobRunner? jobRunner})
+    : _useForTesting = true,
+      _jobRunner = jobRunner;
+
+  /// Creates an [AdblockService] instance with a custom job runner for testing.
+  @visibleForTesting
+  factory AdblockService.createForTest({required FilterJobRunner jobRunner}) =>
+      AdblockService._forTest(jobRunner: jobRunner);
 
   final bool _useForTesting;
 
-  late final FilterIsolateManager _isolateManager;
+  FilterJobRunner? _jobRunner;
   final FilterEngineRef _engineRef = FilterEngineRef(CompiledFilterEngine.empty());
 
   final _ruleCountController = StreamController<int>.broadcast();
@@ -33,6 +40,11 @@ class AdblockService {
   final List<FilterSubscription> _subscriptions = [];
   FilterHttpOptions _httpOptions = const FilterHttpOptions();
   final Map<String, Timer> _updateTimers = {};
+  String? _storagePath;
+  Future<void>? _activeJob;
+  List<FilterSubscription>? _pendingSubscriptions;
+  bool _pendingClearCache = false;
+  bool _isDisposed = false;
 
   /// The platforms supported by this ad-blocking service.
   static const List<TargetPlatform> supportedPlatforms = [
@@ -108,23 +120,15 @@ class AdblockService {
     _httpOptions = httpOptions;
     _observer = observer;
 
-    final baseDir = storagePath ?? (await getApplicationSupportDirectory()).path;
+    _storagePath = storagePath ?? (await getApplicationSupportDirectory()).path;
 
-    _isolateManager = FilterIsolateManager(
+    _jobRunner ??= FilterIsolateManager(
       onEngineReady: _onEngineReady,
       onWorkerEvent: (event) => _observer?.onEvent(event),
       onWorkerError: (error) => _observer?.onError(error),
     );
 
-    await _isolateManager.spawn(
-      storagePath: baseDir,
-      useTestClient: _useForTesting,
-    );
-
-    _isolateManager.sendSubscriptions(
-      subscriptions: _subscriptions,
-      httpOptions: _httpOptions,
-    );
+    _scheduleBuildJob(_subscriptions);
 
     _setupTimers();
   }
@@ -173,15 +177,75 @@ class AdblockService {
 
     _setupTimers();
 
-    _isolateManager.sendSubscriptions(
-      subscriptions: _subscriptions,
-      httpOptions: _httpOptions,
-    );
+    _scheduleBuildJob(_subscriptions);
   }
 
   /// Sends a command to clear the local filter cache. The isolate will delete downloaded files and compiled engines.
   void clearCache() {
-    _isolateManager.sendClearCacheCommand();
+    _scheduleClearCacheJob();
+  }
+
+  void _scheduleBuildJob(List<FilterSubscription> subscriptions) {
+    final snapshot = List<FilterSubscription>.of(subscriptions);
+    if (_activeJob != null) {
+      _pendingSubscriptions = snapshot;
+      return;
+    }
+
+    _activeJob = _runBuildJob(snapshot).whenComplete(_runPendingJobIfNeeded);
+  }
+
+  Future<void> _runBuildJob(List<FilterSubscription> subscriptions) async {
+    try {
+      await _jobRunner!.runBuildJob(
+        subscriptions: subscriptions,
+        httpOptions: _httpOptions,
+        storagePath: _storagePath,
+        useTestClient: _useForTesting,
+      );
+    } on Object catch (error, stackTrace) {
+      _observer?.onError(
+        IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
+      );
+    }
+  }
+
+  void _scheduleClearCacheJob() {
+    if (_activeJob != null) {
+      _pendingClearCache = true;
+      return;
+    }
+
+    _activeJob = _runClearCacheJob().whenComplete(_runPendingJobIfNeeded);
+  }
+
+  Future<void> _runClearCacheJob() async {
+    try {
+      await _jobRunner!.runClearCacheJob(
+        storagePath: _storagePath,
+        useTestClient: _useForTesting,
+      );
+    } on Object catch (error, stackTrace) {
+      _observer?.onError(
+        IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
+      );
+    }
+  }
+
+  void _runPendingJobIfNeeded() {
+    _activeJob = null;
+    if (_isDisposed) return;
+
+    if (_pendingClearCache) {
+      _pendingClearCache = false;
+      _scheduleClearCacheJob();
+      return;
+    }
+
+    final pendingSubscriptions = _pendingSubscriptions;
+    if (pendingSubscriptions == null) return;
+    _pendingSubscriptions = null;
+    _scheduleBuildJob(pendingSubscriptions);
   }
 
   void _setupTimers() {
@@ -203,23 +267,21 @@ class AdblockService {
       final subs = entry.value;
 
       _updateTimers[interval.toString()] = Timer.periodic(interval, (_) {
-        _isolateManager.sendSubscriptions(
-          subscriptions: subs,
-          httpOptions: _httpOptions,
-        );
+        _scheduleBuildJob(subs);
       });
     }
   }
 
   /// Disposes the service and its resources.
   void dispose() {
+    _isDisposed = true;
     unawaited(_ruleCountController.close());
     isReady.dispose();
     for (final timer in _updateTimers.values) {
       timer.cancel();
     }
     _updateTimers.clear();
-    _isolateManager.dispose();
+    _jobRunner?.dispose();
 
     // Dispose observer if it supports it
     final observer = _observer;

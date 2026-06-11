@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
@@ -354,7 +356,85 @@ Some random text that is not a valid adblock list
       // but repository itself still returns Block if queried directly.
       expect(service.isEnabled, isFalse);
     });
+
+    test('should serialize update jobs and keep only the latest pending subscriptions', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+
+      await service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+      );
+
+      expect(runner.startedSubscriptions, hasLength(1));
+
+      service
+        ..updateSubscriptions(const [FilterSubscription(url: 'first-update.txt')])
+        ..updateSubscriptions(const [FilterSubscription(url: 'second-update.txt')]);
+
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
+        ['initial.txt'],
+      );
+
+      runner.completeCurrent();
+      await runner.waitForStartedCount(2);
+
+      expect(
+        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
+        ['initial.txt', 'second-update.txt'],
+      );
+
+      runner.completeCurrent();
+      await runner.waitForIdle();
+      service.dispose();
+    });
   });
+}
+
+class _ControllableFilterJobRunner implements FilterJobRunner {
+  final startedSubscriptions = <List<FilterSubscription>>[];
+  final _startedController = StreamController<int>.broadcast();
+  Completer<void>? _current;
+
+  @override
+  Future<void> runBuildJob({
+    required List<FilterSubscription> subscriptions,
+    required FilterHttpOptions httpOptions,
+    String? storagePath,
+    bool useTestClient = false,
+  }) {
+    if (_current != null) throw StateError('Jobs must not run in parallel');
+    startedSubscriptions.add(List.of(subscriptions));
+    _startedController.add(startedSubscriptions.length);
+    _current = Completer<void>();
+    return _current!.future.whenComplete(() => _current = null);
+  }
+
+  @override
+  Future<void> runClearCacheJob({String? storagePath, bool useTestClient = false}) async {}
+
+  @override
+  void dispose() {}
+
+  void completeCurrent() {
+    final current = _current;
+    if (current == null || current.isCompleted) return;
+    current.complete();
+  }
+
+  Future<void> waitForStartedCount(int count) async {
+    if (startedSubscriptions.length >= count) return;
+    await _startedController.stream.firstWhere((startedCount) => startedCount >= count);
+  }
+
+  Future<void> waitForIdle() async {
+    while (_current != null) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
 }
 
 class _TestObserver implements WebViewObserver {
