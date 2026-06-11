@@ -44,7 +44,7 @@ class WebViewController {
   }
 
   /// Evaluates JavaScript code within the context of the page.
-  /// 
+  ///
   /// **NOTE:** This method shouldn't be called in the onWebViewCreated or onLoadStart events, because, in these events, the WebView is not ready to handle it yet.
   /// Instead, you should call this method, for example, inside the onLoadStop event or in any other events where you know the page is ready "enough".
   Future<dynamic> evaluateJavascript(String source) async {

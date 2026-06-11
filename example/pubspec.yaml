@@ -1,0 +1,23 @@
+name: webview_guardian_example
+description: Example application for the webview_guardian package.
+publish_to: 'none'
+
+version: 1.0.0
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  path_provider: ^2.1.5
+  webview_guardian:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^10.2.0
+
+flutter:
+  uses-material-design: true
