@@ -212,6 +212,10 @@ class FilterIsolateManager implements FilterJobRunner {
 
       case WebViewError():
         _onWorkerError(message);
+        if (message is CacheRestoreFailed) {
+          _completeOnCacheClear = false;
+          _completeActiveJob();
+        }
 
       case ShutdownAck():
         _receivePort?.close();

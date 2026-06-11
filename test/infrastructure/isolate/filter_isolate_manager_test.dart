@@ -97,6 +97,37 @@ example.com##.banner-ad
       expect(engines, hasLength(2));
     });
 
+    test('runBuildJob should complete after terminal cache restore failure', () async {
+      final errors = <WebViewError>[];
+      final invalidStoragePath = File('${tempDir.path}/not_a_directory')..writeAsStringSync('x');
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: errors.add,
+      );
+
+      await expectLater(
+        manager
+            .runBuildJob(
+              subscriptions: [FilterSubscription(url: testFilterFile.path)],
+              httpOptions: const FilterHttpOptions(),
+              storagePath: invalidStoragePath.path,
+              useTestClient: true,
+            )
+            .timeout(const Duration(seconds: 5)),
+        completes,
+      );
+
+      expect(errors.whereType<CacheRestoreFailed>(), isNotEmpty);
+
+      await manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+    });
+
     test('should restore engine from cache on second run (Cold Start Cache Hit)', () async {
       // --- RUN 1: Download and compile ---
       final completer1 = Completer<(CompiledFilterEngine, bool, int)>();
