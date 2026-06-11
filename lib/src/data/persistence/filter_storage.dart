@@ -138,14 +138,16 @@ class FilterStorage {
   }
 
   Future<Directory> _getBaseDirectory() async {
-    if (overridePath != null) {
-      final dir = Directory(overridePath!);
-      if (!dir.existsSync()) {
-        dir.createSync(recursive: true);
-      }
-      return dir;
+    final dir = overridePath != null
+        ? Directory(overridePath!)
+        : await getApplicationSupportDirectory();
+
+    // Create subdirectory for adblocker data
+    final adblockerDir = Directory('${dir.path}/adblocker');
+    if (!adblockerDir.existsSync()) {
+      adblockerDir.createSync(recursive: true);
     }
-    return getApplicationSupportDirectory();
+    return adblockerDir;
   }
 
   Future<File> _getEngineFile() async {
