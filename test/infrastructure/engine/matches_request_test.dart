@@ -164,6 +164,19 @@ void main() {
       expect(rule.matchesRequest(_req('https://example.com/banner')), isFalse);
     });
 
+    test('should restrict domain anchor matching to the request authority', () {
+      final rule = _block('||example.com^');
+
+      expect(rule.matchesRequest(_req('https://example.com/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://sub.example.com/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://example.com:8080/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://user:pass@example.com/ad.js')), isTrue);
+
+      expect(rule.matchesRequest(_req('https://site.test?u=sub.example.com')), isFalse);
+      expect(rule.matchesRequest(_req('https://site.test#u=sub.example.com')), isFalse);
+      expect(rule.matchesRequest(_req('https://sub.example.com@site.test/ad.js')), isFalse);
+    });
+
     test('should match domain anchor with path (||)', () {
       final rule = _block('||example.com/ads/');
       expect(rule.matchesRequest(_req('https://example.com/ads/banner.jpg')), isTrue);

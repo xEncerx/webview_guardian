@@ -88,16 +88,25 @@ bool _matchAdblockPattern(String pattern, String url) {
   // 3. Domain Anchor (||)
   if (pLen >= 2 && pattern.codeUnitAt(0) == 124 /* | */ && pattern.codeUnitAt(1) == 124 /* | */ ) {
     pIdx = 2;
-    // Fast-forward URL to just after `://`
+    // Fast-forward URL to the host portion of the authority.
     final schemeIdx = url.indexOf('://');
     if (schemeIdx != -1) {
       uIdx = schemeIdx + 3;
+    } else if (url.startsWith('//')) {
+      uIdx = 2;
+    }
+
+    final authorityEnd = _authorityEnd(url, uIdx, uLen);
+    for (var i = uIdx; i < authorityEnd; i++) {
+      if (url.codeUnitAt(i) == 64 /* @ */ ) {
+        uIdx = i + 1;
+      }
     }
 
     if (_matchRecursive(pattern, url, pIdx, uIdx, pLen, uLen)) return true;
 
-    // Try matching after dots in the domain name
-    while (uIdx < uLen && url.codeUnitAt(uIdx) != 47 /* / */ ) {
+    // Try matching after dots in the authority only.
+    while (uIdx < authorityEnd) {
       if (url.codeUnitAt(uIdx) == 46 /* . */ ) {
         if (_matchRecursive(pattern, url, pIdx, uIdx + 1, pLen, uLen)) return true;
       }
@@ -175,4 +184,16 @@ bool _isSeparator(int codeUnit) {
   // Allowable non-separators
   if (codeUnit == 95 || codeUnit == 45 || codeUnit == 46 || codeUnit == 37) return false; // _ - . %
   return true;
+}
+
+bool _isAuthorityTerminator(int codeUnit) {
+  return codeUnit == 47 /* / */ || codeUnit == 63 /* ? */ || codeUnit == 35 /* # */;
+}
+
+int _authorityEnd(String url, int start, int length) {
+  var idx = start;
+  while (idx < length && !_isAuthorityTerminator(url.codeUnitAt(idx))) {
+    idx++;
+  }
+  return idx;
 }
