@@ -171,6 +171,7 @@ void main() {
         resourceTypes: {ResourceType.script, ResourceType.image},
         isThirdPartyOnly: true,
         isImportant: true,
+        isMatchCase: true,
         includeDomains: {'a.com', 'b.com'},
         excludeDomains: {'c.com'},
       );
@@ -181,6 +182,7 @@ void main() {
       expect(deserialized.resourceTypes, rule.resourceTypes);
       expect(deserialized.isThirdPartyOnly, isTrue);
       expect(deserialized.isImportant, isTrue);
+      expect(deserialized.isMatchCase, isTrue);
       expect(deserialized.includeDomains, rule.includeDomains);
       expect(deserialized.excludeDomains, rule.excludeDomains);
     });
@@ -198,6 +200,7 @@ void main() {
         expect(deserialized.resourceTypes, isEmpty);
         expect(deserialized.isThirdPartyOnly, isFalse);
         expect(deserialized.isImportant, isFalse);
+        expect(deserialized.isMatchCase, isFalse);
         expect(deserialized.includeDomains, isNull);
         expect(deserialized.excludeDomains, isNull);
       },
@@ -208,6 +211,7 @@ void main() {
         pattern: 'exception.com',
         resourceTypes: {ResourceType.document},
         isImportant: true,
+        isMatchCase: true,
       );
 
       final deserialized = serializer.testRuleRoundTrip(rule) as NetworkExceptionRule;
@@ -216,6 +220,7 @@ void main() {
       expect(deserialized.resourceTypes, {ResourceType.document});
       expect(deserialized.isThirdPartyOnly, isFalse);
       expect(deserialized.isImportant, isTrue);
+      expect(deserialized.isMatchCase, isTrue);
     });
 
     test('CosmeticHideRule serialized and deserialized accurately with null or empty domains', () {

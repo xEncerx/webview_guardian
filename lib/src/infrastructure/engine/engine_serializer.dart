@@ -11,6 +11,8 @@ class EngineSerializer {
   static const int _typeCosmeticException = 4;
   static const int _typeScriptlet = 5;
   static const int _typeCssInject = 6;
+  static const int _typeNetworkBlockMatchCase = 7;
+  static const int _typeNetworkExceptionMatchCase = 8;
 
   /// Serializes the given [CompiledFilterEngine] into a [Uint8List].
   Uint8List serialize(CompiledFilterEngine engine) {
@@ -188,7 +190,7 @@ class EngineSerializer {
   void _writeRule(BinaryWriter writer, FilterRule rule) {
     switch (rule) {
       case NetworkBlockRule():
-        writer.writeUint8(_typeNetworkBlock);
+        writer.writeUint8(rule.isMatchCase ? _typeNetworkBlockMatchCase : _typeNetworkBlock);
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
         writer.writeBool(rule.isThirdPartyOnly);
@@ -196,7 +198,9 @@ class EngineSerializer {
         writer.writeNullableStringSet(rule.includeDomains);
         writer.writeNullableStringSet(rule.excludeDomains);
       case NetworkExceptionRule():
-        writer.writeUint8(_typeNetworkException);
+        writer.writeUint8(
+          rule.isMatchCase ? _typeNetworkExceptionMatchCase : _typeNetworkException,
+        );
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
         writer.writeBool(rule.isThirdPartyOnly);
@@ -227,20 +231,24 @@ class EngineSerializer {
     final type = reader.readUint8();
     switch (type) {
       case _typeNetworkBlock:
+      case _typeNetworkBlockMatchCase:
         return NetworkBlockRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
           isImportant: reader.readBool(),
+          isMatchCase: type == _typeNetworkBlockMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );
       case _typeNetworkException:
+      case _typeNetworkExceptionMatchCase:
         return NetworkExceptionRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
           isImportant: reader.readBool(),
+          isMatchCase: type == _typeNetworkExceptionMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );

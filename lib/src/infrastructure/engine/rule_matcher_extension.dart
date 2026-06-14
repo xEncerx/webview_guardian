@@ -12,6 +12,7 @@ extension FilterRuleMatcher on FilterRule {
         rule.pattern,
         rule.resourceTypes,
         rule.isThirdPartyOnly,
+        rule.isMatchCase,
         rule.includeDomains,
         rule.excludeDomains,
         request,
@@ -20,6 +21,7 @@ extension FilterRuleMatcher on FilterRule {
         rule.pattern,
         rule.resourceTypes,
         rule.isThirdPartyOnly,
+        rule.isMatchCase,
         rule.includeDomains,
         rule.excludeDomains,
         request,
@@ -33,6 +35,7 @@ bool _matchNetworkParams(
   String pattern,
   Set<ResourceType>? resourceTypes,
   bool isThirdPartyOnly,
+  bool isMatchCase,
   Set<String>? includeDomains,
   Set<String>? excludeDomains,
   NetworkRequest request,
@@ -64,11 +67,11 @@ bool _matchNetworkParams(
       }
     }
   }
-  return _matchAdblockPattern(pattern, request.url);
+  return _matchAdblockPattern(pattern, request.url, isMatchCase: isMatchCase);
 }
 
 /// An Adblock Plus pattern matcher.
-bool _matchAdblockPattern(String pattern, String url) {
+bool _matchAdblockPattern(String pattern, String url, {required bool isMatchCase}) {
   if (pattern.isEmpty) return false;
   final pLen = pattern.length;
   final uLen = url.length;
@@ -76,7 +79,11 @@ bool _matchAdblockPattern(String pattern, String url) {
   if (pLen > 2 &&
       pattern.codeUnitAt(0) == 47 /* / */ &&
       pattern.codeUnitAt(pLen - 1) == 47 /* / */ ) {
-    return RegExp(pattern.substring(1, pLen - 1)).hasMatch(url);
+    return RegExp(pattern.substring(1, pLen - 1), caseSensitive: isMatchCase).hasMatch(url);
+  }
+  if (!isMatchCase) {
+    pattern = pattern.toLowerCase();
+    url = url.toLowerCase();
   }
   var pIdx = 0;
   var uIdx = 0;

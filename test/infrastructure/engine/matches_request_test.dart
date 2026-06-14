@@ -20,6 +20,7 @@ NetworkBlockRule _block(
   String pattern, {
   Set<ResourceType>? resourceTypes,
   bool isThirdPartyOnly = false,
+  bool isMatchCase = false,
   Set<String>? includeDomains,
   Set<String>? excludeDomains,
 }) {
@@ -27,6 +28,7 @@ NetworkBlockRule _block(
     pattern: pattern,
     resourceTypes: resourceTypes ?? const {},
     isThirdPartyOnly: isThirdPartyOnly,
+    isMatchCase: isMatchCase,
     includeDomains: includeDomains ?? const {},
     excludeDomains: excludeDomains ?? const {},
   );
@@ -181,6 +183,19 @@ void main() {
       final rule = _block('||example.com/ads/');
       expect(rule.matchesRequest(_req('https://example.com/ads/banner.jpg')), isTrue);
       expect(rule.matchesRequest(_req('https://example.com/images/banner.jpg')), isFalse);
+    });
+
+    test('should match network rules case-insensitively by default', () {
+      final rule = _block('||example.com/AdBanner.js');
+
+      expect(rule.matchesRequest(_req('https://EXAMPLE.com/adbanner.js')), isTrue);
+    });
+
+    test(r'should respect $match-case for network rules', () {
+      final rule = _block('||example.com/AdBanner.js', isMatchCase: true);
+
+      expect(rule.matchesRequest(_req('https://example.com/AdBanner.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://example.com/adbanner.js')), isFalse);
     });
 
     test('should match separator (^)', () {

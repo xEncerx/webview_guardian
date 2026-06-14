@@ -190,6 +190,7 @@ class AdblockPlusParser implements FilterListParser {
       :types,
       isThirdPartyOnly: isThirdParty,
       :isImportant,
+      :isMatchCase,
       includeDomains: include,
       excludeDomains: exclude,
     ) = options;
@@ -200,6 +201,7 @@ class AdblockPlusParser implements FilterListParser {
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
         isImportant: isImportant,
+        isMatchCase: isMatchCase,
         includeDomains: include,
         excludeDomains: exclude,
       );
@@ -209,6 +211,7 @@ class AdblockPlusParser implements FilterListParser {
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
         isImportant: isImportant,
+        isMatchCase: isMatchCase,
         includeDomains: include,
         excludeDomains: exclude,
       );
@@ -219,6 +222,7 @@ class AdblockPlusParser implements FilterListParser {
     Set<ResourceType> types,
     bool isThirdPartyOnly,
     bool isImportant,
+    bool isMatchCase,
     Set<String>? includeDomains,
     Set<String>? excludeDomains,
   })?
@@ -228,6 +232,7 @@ class AdblockPlusParser implements FilterListParser {
         types: <ResourceType>{},
         isThirdPartyOnly: false,
         isImportant: false,
+        isMatchCase: false,
         includeDomains: null,
         excludeDomains: null,
       );
@@ -238,6 +243,7 @@ class AdblockPlusParser implements FilterListParser {
     var hasPositiveTypes = false;
     var isThirdPartyOnly = false;
     var isImportant = false;
+    var isMatchCase = false;
     Set<String>? includeDomains;
     Set<String>? excludeDomains;
 
@@ -258,6 +264,8 @@ class AdblockPlusParser implements FilterListParser {
 
       if (p == 'important') {
         isImportant = true;
+      } else if (p == 'match-case') {
+        isMatchCase = true;
       } else if (p == 'third-party' || p == '3p') {
         isThirdPartyOnly = true;
       } else if (p == '~third-party' || p == 'first-party' || p == '1p') {
@@ -303,6 +311,7 @@ class AdblockPlusParser implements FilterListParser {
       types: types,
       isThirdPartyOnly: isThirdPartyOnly,
       isImportant: isImportant,
+      isMatchCase: isMatchCase,
       includeDomains: includeDomains,
       excludeDomains: excludeDomains,
     );

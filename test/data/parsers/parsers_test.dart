@@ -259,6 +259,26 @@ void main() {
       expect(rule, isA<NetworkExceptionRule>());
       expect((rule as NetworkExceptionRule).pattern, '||good.com^');
     });
+
+    test(r'should preserve $match-case on block and exception network rules', () {
+      final bytes = _bytes(
+        r'||example.com/AdBanner.js$match-case'
+        '\n'
+        r'@@||example.com/AllowedAd.js$match-case',
+      );
+      final rules = parser.parse(bytes).toList();
+
+      expect(rules.length, 2);
+
+      expect(rules[0], isA<NetworkBlockRule>());
+      expect((rules[0] as NetworkBlockRule).pattern, '||example.com/AdBanner.js');
+      expect((rules[0] as NetworkBlockRule).isMatchCase, isTrue);
+
+      expect(rules[1], isA<NetworkExceptionRule>());
+      expect((rules[1] as NetworkExceptionRule).pattern, '||example.com/AllowedAd.js');
+      expect((rules[1] as NetworkExceptionRule).isMatchCase, isTrue);
+    });
+
     test(r'should correctly parse rules with $important modifier', () {
       final bytes = _bytes(
         'mastarti.com/stats/\$important\n'
