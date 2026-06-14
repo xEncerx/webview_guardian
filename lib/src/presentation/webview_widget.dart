@@ -82,6 +82,7 @@ class _WebViewState extends State<WebView> {
   PullToRefreshController? _pullToRefreshController;
 
   late final WebUri _initialUri;
+  String? _initialHost;
   String? _lastInjectedHost;
 
   @override
@@ -103,9 +104,9 @@ class _WebViewState extends State<WebView> {
 
     _initialUri = WebUri(widget.initialUrl);
     try {
-      _lastInjectedHost = _initialUri.host;
+      _initialHost = _initialUri.host;
     } on Exception catch (_) {
-      _lastInjectedHost = null;
+      _initialHost = null;
     }
   }
 
@@ -149,7 +150,7 @@ class _WebViewState extends State<WebView> {
       initialUrlRequest: URLRequest(url: _initialUri),
       initialSettings: _settings,
       pullToRefreshController: _pullToRefreshController,
-      initialUserScripts: UnmodifiableListView(_getScriptsForHost(_lastInjectedHost)),
+      initialUserScripts: UnmodifiableListView(_getInitialScripts()),
       gestureRecognizers: widget.gestureRecognizers,
       onWebViewCreated: (controller) {
         _controller = controller;
@@ -196,19 +197,30 @@ class _WebViewState extends State<WebView> {
   List<UserScript> _getScriptsForHost(String? hostname) {
     if (hostname == null) return [];
 
+    if (!_canBuildInjections) return [];
+
+    return widget.adblockService!.orchestrator!.buildUserScripts(hostname);
+  }
+
+  bool get _canBuildInjections {
     final service = widget.adblockService;
-    if (service == null || !service.isEnabled || !service.isReady.value) return [];
-    if (service.ruleCount == 0) return [];
+    if (service == null || !service.isEnabled || !service.isReady.value) return false;
+    if (service.ruleCount == 0) return false;
 
-    final orchestrator = service.orchestrator;
-    if (orchestrator == null) return [];
+    return service.orchestrator != null;
+  }
 
-    return orchestrator.buildUserScripts(hostname);
+  List<UserScript> _getInitialScripts() {
+    final scripts = _getScriptsForHost(_initialHost);
+    if (scripts.isNotEmpty) {
+      _lastInjectedHost = _initialHost;
+    }
+    return scripts;
   }
 
   Future<void> _applyInjections(InAppWebViewController controller, String hostname) async {
     if (_lastInjectedHost == hostname) return;
-    _lastInjectedHost = hostname;
+    if (!_canBuildInjections) return;
 
     final scripts = _getScriptsForHost(hostname);
 
@@ -216,5 +228,6 @@ class _WebViewState extends State<WebView> {
     for (final script in scripts) {
       await controller.addUserScript(userScript: script);
     }
+    _lastInjectedHost = hostname;
   }
 }
