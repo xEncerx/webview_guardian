@@ -92,7 +92,8 @@ class FilterRepositoryImpl implements FilterRepository {
       dotIndex = current.indexOf('.', dotIndex + 1);
     }
 
-    // Empty string is used as a key for global rules matching all domains
+    // Empty string and '*' are both used by serialized engines for global rules.
     yield '';
+    yield '*';
   }
 }

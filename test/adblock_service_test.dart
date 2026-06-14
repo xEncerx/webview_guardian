@@ -138,6 +138,62 @@ Some random text that is not a valid adblock list
       );
     });
 
+    test('should apply global cosmetic and scriptlet rules to any hostname', () async {
+      final globalFilterFile = File('${tempDir.path}/global_filter.txt')
+        ..writeAsStringSync('''
+[Adblock Plus 2.0]
+##.global-ad
+#%#//scriptlet('abort-on-property-read', 'ads')
+''');
+
+      await service.init(
+        subscriptions: [FilterSubscription(url: globalFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      while (!service.isReady.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      final userScripts = service.orchestrator!.buildUserScripts('unrelated-site.test');
+
+      expect(
+        userScripts.where((script) => script.source.contains('.global-ad')),
+        isNotEmpty,
+      );
+      expect(
+        userScripts.where((script) => script.source.contains('abortOnPropertyRead')),
+        isNotEmpty,
+      );
+    });
+
+    test('should apply global cosmetic exception rules to domain-specific hides', () async {
+      final globalExceptionFilterFile = File('${tempDir.path}/global_exception_filter.txt')
+        ..writeAsStringSync('''
+[Adblock Plus 2.0]
+example.com##.sponsored
+#@#.sponsored
+''');
+
+      await service.init(
+        subscriptions: [FilterSubscription(url: globalExceptionFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      while (!service.isReady.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      final userScripts = service.orchestrator!.buildUserScripts('example.com');
+
+      expect(
+        userScripts.where((script) => script.source.contains('.sponsored')),
+        isEmpty,
+      );
+    });
+
     test('should not crash on invalid filter file and should allow traffic (Resilience)', () async {
       await service.init(
         subscriptions: [FilterSubscription(url: brokenFilterFile.path)],
