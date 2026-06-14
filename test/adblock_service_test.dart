@@ -59,6 +59,19 @@ Some random text that is not a valid adblock list
     // We use a custom observer to track events and errors
     final observer = _TestObserver((e) => events.add(e), (e) => errors.add(e));
 
+    test('awaiting init returns after the first engine is ready', () async {
+      await service.init(
+        subscriptions: [FilterSubscription(url: validFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      expect(service.isReady.value, isTrue);
+      expect(service.repository, isNotNull);
+      expect(service.orchestrator, isNotNull);
+      expect(service.trafficInterceptor, isNotNull);
+    });
+
     test('should initialize, compile engine, and apply rules correctly (Normal Flow)', () async {
       await service.init(
         subscriptions: [FilterSubscription(url: validFilterFile.path)],
@@ -361,10 +374,11 @@ Some random text that is not a valid adblock list
       final runner = _ControllableFilterJobRunner();
       final service = AdblockService.createForTest(jobRunner: runner);
 
-      await service.init(
+      final initFuture = service.init(
         subscriptions: const [FilterSubscription(url: 'initial.txt')],
         storagePath: tempDir.path,
       );
+      await runner.waitForStartedCount(1);
 
       expect(runner.startedSubscriptions, hasLength(1));
 
@@ -381,6 +395,7 @@ Some random text that is not a valid adblock list
 
       runner.completeCurrent();
       await runner.waitForStartedCount(2);
+      await initFuture;
 
       expect(
         runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),

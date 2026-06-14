@@ -128,7 +128,7 @@ class AdblockService {
       onWorkerError: (error) => _observer?.onError(error),
     );
 
-    _scheduleBuildJob(_subscriptions);
+    await _scheduleBuildJob(_subscriptions);
 
     _setupTimers();
   }
@@ -177,7 +177,7 @@ class AdblockService {
 
     _setupTimers();
 
-    _scheduleBuildJob(_subscriptions);
+    unawaited(_scheduleBuildJob(_subscriptions));
   }
 
   /// Sends a command to clear the local filter cache. The isolate will delete downloaded files and compiled engines.
@@ -185,14 +185,16 @@ class AdblockService {
     _scheduleClearCacheJob();
   }
 
-  void _scheduleBuildJob(List<FilterSubscription> subscriptions) {
+  Future<void> _scheduleBuildJob(List<FilterSubscription> subscriptions) {
     final snapshot = List<FilterSubscription>.of(subscriptions);
     if (_activeJob != null) {
       _pendingSubscriptions = snapshot;
-      return;
+      return _activeJob!;
     }
 
-    _activeJob = _runBuildJob(snapshot).whenComplete(_runPendingJobIfNeeded);
+    final job = _runBuildJob(snapshot).whenComplete(_runPendingJobIfNeeded);
+    _activeJob = job;
+    return job;
   }
 
   Future<void> _runBuildJob(List<FilterSubscription> subscriptions) async {
@@ -245,7 +247,7 @@ class AdblockService {
     final pendingSubscriptions = _pendingSubscriptions;
     if (pendingSubscriptions == null) return;
     _pendingSubscriptions = null;
-    _scheduleBuildJob(pendingSubscriptions);
+    unawaited(_scheduleBuildJob(pendingSubscriptions));
   }
 
   void _setupTimers() {
@@ -267,7 +269,7 @@ class AdblockService {
       final subs = entry.value;
 
       _updateTimers[interval.toString()] = Timer.periodic(interval, (_) {
-        _scheduleBuildJob(subs);
+        unawaited(_scheduleBuildJob(subs));
       });
     }
   }
