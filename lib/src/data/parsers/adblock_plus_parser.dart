@@ -189,6 +189,7 @@ class AdblockPlusParser implements FilterListParser {
     final (
       :types,
       isThirdPartyOnly: isThirdParty,
+      isFirstPartyOnly: isFirstParty,
       :isImportant,
       :isMatchCase,
       includeDomains: include,
@@ -200,6 +201,7 @@ class AdblockPlusParser implements FilterListParser {
         pattern: pattern,
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
+        isFirstPartyOnly: isFirstParty,
         isImportant: isImportant,
         isMatchCase: isMatchCase,
         includeDomains: include,
@@ -210,6 +212,7 @@ class AdblockPlusParser implements FilterListParser {
         pattern: pattern,
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
+        isFirstPartyOnly: isFirstParty,
         isImportant: isImportant,
         isMatchCase: isMatchCase,
         includeDomains: include,
@@ -221,6 +224,7 @@ class AdblockPlusParser implements FilterListParser {
   ({
     Set<ResourceType> types,
     bool isThirdPartyOnly,
+    bool isFirstPartyOnly,
     bool isImportant,
     bool isMatchCase,
     Set<String>? includeDomains,
@@ -231,6 +235,7 @@ class AdblockPlusParser implements FilterListParser {
       return (
         types: <ResourceType>{},
         isThirdPartyOnly: false,
+        isFirstPartyOnly: false,
         isImportant: false,
         isMatchCase: false,
         includeDomains: null,
@@ -242,6 +247,7 @@ class AdblockPlusParser implements FilterListParser {
     final excludedTypes = <ResourceType>{};
     var hasPositiveTypes = false;
     var isThirdPartyOnly = false;
+    var isFirstPartyOnly = false;
     var isImportant = false;
     var isMatchCase = false;
     Set<String>? includeDomains;
@@ -269,7 +275,7 @@ class AdblockPlusParser implements FilterListParser {
       } else if (p == 'third-party' || p == '3p') {
         isThirdPartyOnly = true;
       } else if (p == '~third-party' || p == 'first-party' || p == '1p') {
-        return null;
+        isFirstPartyOnly = true;
       } else if (p.startsWith('domain=') || p.startsWith('from=')) {
         final domStr = p.substring(p.indexOf('=') + 1);
         final domParts = domStr.split('|');
@@ -307,9 +313,12 @@ class AdblockPlusParser implements FilterListParser {
     }
     types.removeAll(excludedTypes);
 
+    if (isFirstPartyOnly && isThirdPartyOnly) return null;
+
     return (
       types: types,
       isThirdPartyOnly: isThirdPartyOnly,
+      isFirstPartyOnly: isFirstPartyOnly,
       isImportant: isImportant,
       isMatchCase: isMatchCase,
       includeDomains: includeDomains,

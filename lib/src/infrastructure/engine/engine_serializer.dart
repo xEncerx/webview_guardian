@@ -13,6 +13,10 @@ class EngineSerializer {
   static const int _typeCssInject = 6;
   static const int _typeNetworkBlockMatchCase = 7;
   static const int _typeNetworkExceptionMatchCase = 8;
+  static const int _typeNetworkBlockFirstParty = 9;
+  static const int _typeNetworkExceptionFirstParty = 10;
+  static const int _typeNetworkBlockFirstPartyMatchCase = 11;
+  static const int _typeNetworkExceptionFirstPartyMatchCase = 12;
 
   /// Serializes the given [CompiledFilterEngine] into a [Uint8List].
   Uint8List serialize(CompiledFilterEngine engine) {
@@ -190,7 +194,15 @@ class EngineSerializer {
   void _writeRule(BinaryWriter writer, FilterRule rule) {
     switch (rule) {
       case NetworkBlockRule():
-        writer.writeUint8(rule.isMatchCase ? _typeNetworkBlockMatchCase : _typeNetworkBlock);
+        writer.writeUint8(
+          rule.isFirstPartyOnly
+              ? rule.isMatchCase
+                    ? _typeNetworkBlockFirstPartyMatchCase
+                    : _typeNetworkBlockFirstParty
+              : rule.isMatchCase
+              ? _typeNetworkBlockMatchCase
+              : _typeNetworkBlock,
+        );
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
         writer.writeBool(rule.isThirdPartyOnly);
@@ -199,7 +211,13 @@ class EngineSerializer {
         writer.writeNullableStringSet(rule.excludeDomains);
       case NetworkExceptionRule():
         writer.writeUint8(
-          rule.isMatchCase ? _typeNetworkExceptionMatchCase : _typeNetworkException,
+          rule.isFirstPartyOnly
+              ? rule.isMatchCase
+                    ? _typeNetworkExceptionFirstPartyMatchCase
+                    : _typeNetworkExceptionFirstParty
+              : rule.isMatchCase
+              ? _typeNetworkExceptionMatchCase
+              : _typeNetworkException,
         );
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
@@ -232,23 +250,35 @@ class EngineSerializer {
     switch (type) {
       case _typeNetworkBlock:
       case _typeNetworkBlockMatchCase:
+      case _typeNetworkBlockFirstParty:
+      case _typeNetworkBlockFirstPartyMatchCase:
         return NetworkBlockRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
+          isFirstPartyOnly:
+              type == _typeNetworkBlockFirstParty || type == _typeNetworkBlockFirstPartyMatchCase,
           isImportant: reader.readBool(),
-          isMatchCase: type == _typeNetworkBlockMatchCase,
+          isMatchCase:
+              type == _typeNetworkBlockMatchCase || type == _typeNetworkBlockFirstPartyMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );
       case _typeNetworkException:
       case _typeNetworkExceptionMatchCase:
+      case _typeNetworkExceptionFirstParty:
+      case _typeNetworkExceptionFirstPartyMatchCase:
         return NetworkExceptionRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
+          isFirstPartyOnly:
+              type == _typeNetworkExceptionFirstParty ||
+              type == _typeNetworkExceptionFirstPartyMatchCase,
           isImportant: reader.readBool(),
-          isMatchCase: type == _typeNetworkExceptionMatchCase,
+          isMatchCase:
+              type == _typeNetworkExceptionMatchCase ||
+              type == _typeNetworkExceptionFirstPartyMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );

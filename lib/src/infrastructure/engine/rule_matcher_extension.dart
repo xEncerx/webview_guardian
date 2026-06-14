@@ -12,6 +12,7 @@ extension FilterRuleMatcher on FilterRule {
         rule.pattern,
         rule.resourceTypes,
         rule.isThirdPartyOnly,
+        rule.isFirstPartyOnly,
         rule.isMatchCase,
         rule.includeDomains,
         rule.excludeDomains,
@@ -21,6 +22,7 @@ extension FilterRuleMatcher on FilterRule {
         rule.pattern,
         rule.resourceTypes,
         rule.isThirdPartyOnly,
+        rule.isFirstPartyOnly,
         rule.isMatchCase,
         rule.includeDomains,
         rule.excludeDomains,
@@ -35,6 +37,7 @@ bool _matchNetworkParams(
   String pattern,
   Set<ResourceType>? resourceTypes,
   bool isThirdPartyOnly,
+  bool isFirstPartyOnly,
   bool isMatchCase,
   Set<String>? includeDomains,
   Set<String>? excludeDomains,
@@ -47,6 +50,9 @@ bool _matchNetworkParams(
   }
 
   if (isThirdPartyOnly && !request.isThirdParty) {
+    return false;
+  }
+  if (isFirstPartyOnly && request.isThirdParty) {
     return false;
   }
   final sourceHost = request.sourceHost;

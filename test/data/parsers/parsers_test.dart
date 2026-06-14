@@ -420,9 +420,30 @@ void main() {
         expect(rules, isEmpty);
       });
 
-      test('should drop rules with first-party or ~third-party modifiers', () {
+      test('should parse first-party aliases as active network rules', () {
         final bytes = _bytes(
           '||ads.com^\$first-party\n||tracker.com^\$~third-party\n||analytics.com^\$1p',
+        );
+        final rules = parser.parse(bytes).toList();
+
+        expect(rules.length, 3);
+        expect(rules, everyElement(isA<NetworkBlockRule>()));
+        expect((rules[0] as NetworkBlockRule).pattern, '||ads.com^');
+        expect((rules[1] as NetworkBlockRule).pattern, '||tracker.com^');
+        expect((rules[2] as NetworkBlockRule).pattern, '||analytics.com^');
+      });
+
+      test('should parse first-party exception rules as active network rules', () {
+        final rules = parser.parse(_bytes(r'@@||ads.com^$1p')).toList();
+
+        expect(rules.length, 1);
+        expect(rules.first, isA<NetworkExceptionRule>());
+        expect((rules.first as NetworkExceptionRule).pattern, '||ads.com^');
+      });
+
+      test('should drop rules with contradictory first-party and third-party modifiers', () {
+        final bytes = _bytes(
+          '||ads.com^\$first-party,third-party\n||tracker.com^\$~third-party,3p',
         );
         final rules = parser.parse(bytes).toList();
 

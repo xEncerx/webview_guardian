@@ -1,8 +1,22 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
+
+Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
+
+NetworkRequest _request(String url, {required String sourceUrl}) {
+  final uri = Uri.parse(url);
+  return NetworkRequest(
+    url: uri.toString(),
+    host: uri.host,
+    sourceHost: Uri.parse(sourceUrl).host,
+    resourceType: ResourceType.script,
+  );
+}
 
 // Extension to help test individual rules easily.
 extension EngineSerializerTestExt on EngineSerializer {
@@ -185,6 +199,45 @@ void main() {
       expect(deserialized.isMatchCase, isTrue);
       expect(deserialized.includeDomains, rule.includeDomains);
       expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
+
+    test('NetworkBlockRule preserves first-party-only matching after round trip', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'||ads.com^$1p')).single;
+
+      final deserialized = serializer.testRuleRoundTrip(rule);
+
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://ads.com'),
+        ),
+        isTrue,
+      );
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('NetworkExceptionRule preserves first-party-only matching after round trip', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'@@||ads.com^$first-party')).single;
+
+      final deserialized = serializer.testRuleRoundTrip(rule);
+
+      expect(deserialized, isA<NetworkExceptionRule>());
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://ads.com'),
+        ),
+        isTrue,
+      );
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+        ),
+        isFalse,
+      );
     });
 
     test(
@@ -499,6 +552,36 @@ void main() {
       final bytesWithShared = serializer.serialize(engineWithShared);
 
       expect(bytesWithShared.length, lessThan(bytesWithDuplicates.length));
+    });
+
+    test('rule pool keeps first-party-only rule distinct from unconstrained rule', () {
+      final rules = AdblockPlusParser()
+          .parse(_bytes('||ads.com^\n||ads.com^\$first-party'))
+          .cast<NetworkBlockRule>()
+          .toList();
+      final engine = CompiledFilterEngine(
+        totalRules: rules.length,
+        trieBuffer: Uint32List(0),
+        trieRules: rules,
+        tokenDispatchTable: {},
+        fallbackRules: {},
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final restored = serializer.deserialize(serializer.serialize(engine));
+
+      expect(restored.trieRules, hasLength(2));
+      expect(
+        restored.trieRules.where(
+          (rule) => rule.matchesRequest(
+            _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+          ),
+        ),
+        hasLength(1),
+      );
     });
 
     test('maintains identical object references via rule pool deduplication across sections', () {

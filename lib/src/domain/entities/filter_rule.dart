@@ -43,6 +43,7 @@ final class NetworkBlockRule extends FilterRule {
     required this.pattern,
     this.resourceTypes = const {},
     this.isThirdPartyOnly = false,
+    this.isFirstPartyOnly = false,
     this.isImportant = false,
     this.isMatchCase = false,
     this.includeDomains,
@@ -57,6 +58,9 @@ final class NetworkBlockRule extends FilterRule {
 
   /// Whether this rule should only apply to third-party requests.
   final bool isThirdPartyOnly;
+
+  /// Whether this rule should only apply to first-party requests.
+  final bool isFirstPartyOnly;
 
   /// Whether this rule is marked as important, which may give it higher precedence over other rules.
   final bool isImportant;
@@ -76,6 +80,7 @@ final class NetworkBlockRule extends FilterRule {
       (other is NetworkBlockRule &&
           pattern == other.pattern &&
           isThirdPartyOnly == other.isThirdPartyOnly &&
+          isFirstPartyOnly == other.isFirstPartyOnly &&
           isImportant == other.isImportant &&
           isMatchCase == other.isMatchCase &&
           _setEquals(resourceTypes, other.resourceTypes) &&
@@ -83,7 +88,12 @@ final class NetworkBlockRule extends FilterRule {
           _setEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => pattern.hashCode ^ isImportant.hashCode ^ isMatchCase.hashCode;
+  int get hashCode =>
+      pattern.hashCode ^
+      isThirdPartyOnly.hashCode ^
+      isFirstPartyOnly.hashCode ^
+      isImportant.hashCode ^
+      isMatchCase.hashCode;
 }
 
 /// A rule that allows network requests matching a specific pattern and resource types, overriding block rules.
@@ -94,6 +104,7 @@ final class NetworkExceptionRule extends FilterRule {
     required this.pattern,
     this.resourceTypes = const {},
     this.isThirdPartyOnly = false,
+    this.isFirstPartyOnly = false,
     this.isImportant = false,
     this.isMatchCase = false,
     this.includeDomains,
@@ -108,6 +119,9 @@ final class NetworkExceptionRule extends FilterRule {
 
   /// Whether this rule should only apply to third-party requests.
   final bool isThirdPartyOnly;
+
+  /// Whether this rule should only apply to first-party requests.
+  final bool isFirstPartyOnly;
 
   /// Whether this rule is marked as important, which may give it higher precedence over other rules.
   final bool isImportant;
@@ -128,6 +142,7 @@ final class NetworkExceptionRule extends FilterRule {
       (other is NetworkExceptionRule &&
           pattern == other.pattern &&
           isThirdPartyOnly == other.isThirdPartyOnly &&
+          isFirstPartyOnly == other.isFirstPartyOnly &&
           isImportant == other.isImportant &&
           isMatchCase == other.isMatchCase &&
           _setEquals(resourceTypes, other.resourceTypes) &&
@@ -135,7 +150,12 @@ final class NetworkExceptionRule extends FilterRule {
           _setEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => pattern.hashCode ^ isImportant.hashCode ^ isMatchCase.hashCode;
+  int get hashCode =>
+      pattern.hashCode ^
+      isThirdPartyOnly.hashCode ^
+      isFirstPartyOnly.hashCode ^
+      isImportant.hashCode ^
+      isMatchCase.hashCode;
 }
 
 /// A rule that hides elements on a webpage matching a specific CSS selector.

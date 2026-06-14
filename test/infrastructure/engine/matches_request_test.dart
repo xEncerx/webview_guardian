@@ -1,6 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:test/test.dart';
+import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
+
+Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
 NetworkRequest _req(
   String url, {
@@ -91,6 +97,35 @@ void main() {
 
       expect(
         rule.matchesRequest(_req('https://example.com/banner')),
+        isFalse,
+      );
+    });
+
+    test('should drop when first-party modifier receives third-party request', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'||ads.com^$first-party')).single;
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner', sourceUrl: 'https://ads.com')),
+        isTrue,
+      );
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner')),
+        isFalse,
+      );
+    });
+
+    test('should apply first-party restriction to exception rules', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'@@||ads.com^$1p')).single;
+
+      expect(rule, isA<NetworkExceptionRule>());
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner', sourceUrl: 'https://ads.com')),
+        isTrue,
+      );
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner')),
         isFalse,
       );
     });
