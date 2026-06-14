@@ -79,10 +79,12 @@ void main() {
     });
 
     test('fetch should throw exception on invalid URL', () async {
-      expect(
-        () => client.fetch(
-          const FilterSubscription(url: 'http://invalid.local.domain.that.does.not.exist'),
-        ),
+      final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final unusedPort = socket.port;
+      await socket.close();
+
+      await expectLater(
+        client.fetch(FilterSubscription(url: 'http://127.0.0.1:$unusedPort')),
         throwsA(isA<SocketException>()),
       );
     });
