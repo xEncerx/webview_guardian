@@ -374,6 +374,113 @@ example.com##.sponsored
       newService.dispose();
     });
 
+    test('clearCache clears active in-memory rules without removing subscriptions', () async {
+      final subscription = FilterSubscription(url: validFilterFile.path);
+
+      await service.init(
+        subscriptions: [subscription],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      while (!service.isReady.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      expect(service.subscriptions, [subscription]);
+      expect(service.ruleCount, greaterThan(0));
+      expect(
+        service.repository?.lookupNetworkRequest(
+          NetworkRequest(
+            url: 'https://ads.example.com/script.js',
+            host: 'ads.example.com',
+            resourceType: ResourceType.script,
+            sourceHost: 'example.com',
+          ),
+        ),
+        isA<Block>(),
+      );
+      expect(
+        service.orchestrator!
+            .buildUserScripts('example.com')
+            .where(
+              (script) => script.source.contains('.banner'),
+            ),
+        isNotEmpty,
+      );
+
+      service.clearCache();
+
+      expect(service.subscriptions, [subscription]);
+      expect(service.ruleCount, 0);
+      expect(
+        service.repository?.lookupNetworkRequest(
+          NetworkRequest(
+            url: 'https://ads.example.com/script.js',
+            host: 'ads.example.com',
+            resourceType: ResourceType.script,
+            sourceHost: 'example.com',
+          ),
+        ),
+        isA<Allow>(),
+      );
+      expect(
+        service.orchestrator!
+            .buildUserScripts('example.com')
+            .where(
+              (script) => script.source.contains('.banner'),
+            ),
+        isEmpty,
+      );
+    });
+
+    test('clearCache ignores active build results that complete after clearing', () async {
+      final cacheCleared = Completer<void>();
+      final ruleCountsAfterClear = <int>[];
+      var clearRequested = false;
+
+      final raceObserver = _TestObserver((event) {
+        events.add(event);
+        if (clearRequested && event is FilterCacheCleared && !cacheCleared.isCompleted) {
+          cacheCleared.complete();
+        }
+      }, (error) => errors.add(error));
+
+      await service.init(
+        subscriptions: [FilterSubscription(url: validFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: raceObserver,
+      );
+
+      while (!service.isReady.value) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      events.clear();
+      final ruleCountSubscription = service.ruleCountStream.listen((count) {
+        if (clearRequested) ruleCountsAfterClear.add(count);
+      });
+      service.updateSubscriptions([FilterSubscription(url: validFilterFile.path)]);
+      clearRequested = true;
+      service.clearCache();
+
+      await cacheCleared.future.timeout(const Duration(seconds: 5));
+      await ruleCountSubscription.cancel();
+
+      expect(ruleCountsAfterClear.where((count) => count > 0), isEmpty);
+      expect(service.ruleCount, 0);
+      expect(
+        service.orchestrator!
+            .buildUserScripts('example.com')
+            .where(
+              (script) =>
+                  script.source.contains('.banner') ||
+                  script.source.contains('abortOnPropertyRead'),
+            ),
+        isEmpty,
+      );
+    });
+
     test('should fetch updates based on timer', () async {
       final sub = FilterSubscription(
         url: validFilterFile.path,

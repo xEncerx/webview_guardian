@@ -11,6 +11,8 @@ class FilterMatcher {
 
   /// Matches a network request against all filter rules to determine the appropriate action.
   FilterDecision matchNetworkRequest(NetworkRequest request) {
+    if (_engineRef.current.totalRules == 0) return const Allow();
+
     FilterRule? bestMatch;
     var highestWeight = 0;
 

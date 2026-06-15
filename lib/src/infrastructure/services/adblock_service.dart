@@ -42,6 +42,8 @@ class AdblockService {
   final Map<String, Timer> _updateTimers = {};
   String? _storagePath;
   Future<void>? _activeJob;
+  int? _activeBuildGeneration;
+  int _cacheClearGeneration = 0;
   List<FilterSubscription>? _pendingSubscriptions;
   bool _pendingClearCache = false;
   bool _isDisposed = false;
@@ -139,6 +141,8 @@ class AdblockService {
     int totalRules,
     Duration compilationTime,
   ) {
+    if (_activeBuildGeneration != _cacheClearGeneration) return;
+
     _engineRef.update(engine);
     _ruleCountController.add(engine.totalRules);
 
@@ -185,6 +189,12 @@ class AdblockService {
     _scheduleClearCacheJob();
   }
 
+  void _resetEngine() {
+    _engineRef.update(CompiledFilterEngine.empty());
+    _ruleCountController.add(0);
+    unawaited(_trafficInterceptor?.onEngineUpdated());
+  }
+
   Future<void> _scheduleBuildJob(List<FilterSubscription> subscriptions) {
     final snapshot = List<FilterSubscription>.of(subscriptions);
     if (_activeJob != null) {
@@ -192,6 +202,7 @@ class AdblockService {
       return _activeJob!;
     }
 
+    _activeBuildGeneration = _cacheClearGeneration;
     final job = _runBuildJob(snapshot).whenComplete(_runPendingJobIfNeeded);
     _activeJob = job;
     return job;
@@ -213,11 +224,15 @@ class AdblockService {
   }
 
   void _scheduleClearCacheJob() {
+    _cacheClearGeneration++;
+    _resetEngine();
+
     if (_activeJob != null) {
       _pendingClearCache = true;
       return;
     }
 
+    _activeBuildGeneration = null;
     _activeJob = _runClearCacheJob().whenComplete(_runPendingJobIfNeeded);
   }
 
@@ -236,6 +251,7 @@ class AdblockService {
 
   void _runPendingJobIfNeeded() {
     _activeJob = null;
+    _activeBuildGeneration = null;
     if (_isDisposed) return;
 
     if (_pendingClearCache) {
