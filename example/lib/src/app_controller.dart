@@ -114,10 +114,13 @@ class AppController extends ChangeNotifier {
     _safeNotifyListeners();
   }
 
-  void clearCache() {
-    adblockService.clearCache();
-    _statusMessage = 'Cache clear requested.';
-    _addLog(LogEntry.info('Cache clear requested', 'The worker will clear cached filters.'));
+  Future<void> clearCache() async {
+    _statusMessage = 'Clearing cache...';
+    _safeNotifyListeners();
+
+    await adblockService.clearCache();
+    _statusMessage = 'Cache cleared.';
+    _addLog(LogEntry.info('Cache cleared', 'Cached filters were removed.'));
     _safeNotifyListeners();
   }
 
@@ -130,7 +133,7 @@ class AppController extends ChangeNotifier {
     _safeNotifyListeners();
 
     await _storage.save(directory, _subscriptionUrls);
-    adblockService.updateSubscriptions(_toFilterSubscriptions(_subscriptionUrls));
+    await adblockService.updateSubscriptions(_toFilterSubscriptions(_subscriptionUrls));
 
     _isUpdatingSubscriptions = false;
     _statusMessage = 'Subscriptions updated.';

@@ -128,7 +128,7 @@ adblockService.isReady.addListener(() {
 - **`isEnabled`**: You can toggle the ad-blocker on and off dynamically by setting `adblockService.isEnabled = true/false`.
 - **`isReady`**: A `ValueNotifier<bool>` that indicates whether the filter engine is loaded and ready.
 - **`ruleCount` & `ruleCountStream`**: You can easily retrieve the total number of currently active rules synchronously via `ruleCount`, or build reactive UIs (like `StreamBuilder`) using the `ruleCountStream` to get real-time updates when the engine recompiles.
-- **`init()`**: Takes a list of `FilterSubscription`s, optional `FilterHttpOptions` for network requests, and an optional `WebViewObserver`.
+- **`init()`**: Takes a list of `FilterSubscription`s, optional `FilterHttpOptions` for network requests, and an optional `WebViewObserver`. Call it once before using `updateSubscriptions()` or `clearCache()`.
 
 #### Network Configuration with FilterHttpOptions
 
@@ -136,6 +136,7 @@ When initializing `AdblockService`, you can customize network behavior using `Fi
 
 ```dart
 await adblockService.init(
+  subscriptions: mySubscriptions,
   httpOptions: FilterHttpOptions(
     connectTimeout: const Duration(seconds: 15),  // Connection timeout
     receiveTimeout: const Duration(seconds: 60), // Response timeout
@@ -244,6 +245,9 @@ StreamBuilder<WebViewEvent>(
 observer.errors.listen((error) {
   print('Adblock Error: ${error.message}');
 });
+
+// Dispose observers you create when they are no longer needed.
+observer.dispose();
 ```
 
 ### 2. Using WebViewObserver Directly (For Simple Logging/Debugging)
@@ -300,6 +304,6 @@ await adblockService.init(
 
 ## Cache and Memory Management
 
-- **`clearCache()`**: Clears all downloaded filters and compiled engine files from the device storage. Useful for forcing a fresh download.
-- **`updateSubscriptions()`**: Replace the currently active subscriptions and trigger an immediate background update.
-- **`dispose()`**: Cancels all update timers and shuts down the background isolate. Make sure to call this if your app completely tears down the service.
+- **`await clearCache()`**: Clears all downloaded filters and compiled engine files from the device storage. It also clears the in-memory engine immediately and completes after the cache clear job finishes.
+- **`await updateSubscriptions()`**: Replaces the currently active subscriptions and completes after the effective background update finishes. Multiple pending updates are collapsed so only the latest subscription list is built.
+- **`dispose()`**: Cancels all update timers and shuts down the background isolate. Make sure to call this if your app completely tears down the service. Observers passed to `init()` remain caller-owned and should be disposed by the code that created them.

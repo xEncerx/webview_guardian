@@ -10,7 +10,7 @@ class StreamWebViewObserver implements WebViewObserver {
   ///
   /// - [delegates] is the list of observers that will receive events and errors emitted by this observer.
   ///
-  /// **The AdblockService manages the lifecycle of the [StreamWebViewObserver], calling dispose() when cleaning up.**
+  /// The caller owns this observer and should call [dispose] when it is no longer needed.
   StreamWebViewObserver({required List<WebViewObserver> delegates}) : _delegates = delegates {
     for (final delegate in _delegates) {
       _eventController.stream.listen(delegate.onEvent);
