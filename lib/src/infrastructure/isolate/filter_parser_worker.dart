@@ -2,14 +2,20 @@
 // ignore_for_file: avoid_catches_without_on_clauses
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+import 'package:meta/meta.dart';
 import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
+const _engineCacheFormatVersion = 1;
+const _filterParserVersion = 1;
+typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
 
 /// Arguments passed to the filter parser worker isolate on startup.
 typedef WorkerInitArgs = ({SendPort sendPort, String? storagePath, bool useTestClient});
@@ -75,17 +81,25 @@ Future<void> _runPipeline({
 
   try {
     // Check ETags and fetch updated filter lists if needed.
-    final filtersChanged = await _checkAndFetchFilters(
+    final fetchResult = await _checkAndFetchFilters(
       subscriptions: subscriptions,
       httpOptions: httpOptions,
       storage: storage,
       observer: observer,
       useTestClient: useTestClient,
     );
+    final cacheIdentity = await _buildEngineCacheIdentity(
+      subscriptions: subscriptions,
+      metadataByUrl: fetchResult.metadataByUrl,
+    );
+    final hasAllSubscriptionData = _hasAllSubscriptionData(
+      subscriptions: subscriptions,
+      metadataByUrl: fetchResult.metadataByUrl,
+    );
 
     // If no changes detected and cached engine exists, load and return it immediately without rebuilding.
-    if (!filtersChanged) {
-      final cachedEngineBytes = await _loadCachedEngine(storage);
+    if (!fetchResult.filtersChanged && hasAllSubscriptionData) {
+      final cachedEngineBytes = await _loadCachedEngine(storage, cacheIdentity: cacheIdentity);
       if (cachedEngineBytes != null) {
         stopwatch.stop();
         final totalRules = BinaryReader(cachedEngineBytes).readInt32();
@@ -102,7 +116,9 @@ Future<void> _runPipeline({
 
     // If there no cached engine or filters have changed, run _parseAndBuildEngine pipeline to build new engine.
     final newEngine = await _parseAndBuildEngine(subscriptions: subscriptions, storage: storage);
-    await storage.saveEngineBytes(newEngine.bytes);
+    if (hasAllSubscriptionData) {
+      await storage.saveEngineBytes(newEngine.bytes, cacheIdentity: cacheIdentity);
+    }
 
     stopwatch.stop();
     replyPort.send(
@@ -117,7 +133,21 @@ Future<void> _runPipeline({
 
     // If engine build fails, attempt to load cached engine as fallback to avoid leaving main isolate without any engine.
     try {
-      final fallbackEngineBytes = await _loadCachedEngine(storage);
+      final metadataByUrl = await _loadSubscriptionMetadata(
+        subscriptions: subscriptions,
+        storage: storage,
+      );
+      final cacheIdentity = await _buildEngineCacheIdentity(
+        subscriptions: subscriptions,
+        metadataByUrl: metadataByUrl,
+      );
+      final hasAllSubscriptionData = _hasAllSubscriptionData(
+        subscriptions: subscriptions,
+        metadataByUrl: metadataByUrl,
+      );
+      final fallbackEngineBytes = hasAllSubscriptionData
+          ? await _loadCachedEngine(storage, cacheIdentity: cacheIdentity)
+          : null;
       if (fallbackEngineBytes != null) {
         stopwatch.stop();
         final totalRules = BinaryReader(fallbackEngineBytes).readInt32();
@@ -145,7 +175,7 @@ Future<void> _runPipeline({
 /// Checks ETags and fetches updated filter lists if they have changed.
 ///
 /// Returns a boolean indicating whether any filters were updated or missing.
-Future<bool> _checkAndFetchFilters({
+Future<_FetchResult> _checkAndFetchFilters({
   required List<FilterSubscription> subscriptions,
   required FilterHttpOptions httpOptions,
   required FilterStorage storage,
@@ -159,12 +189,12 @@ Future<bool> _checkAndFetchFilters({
 
     try {
       final etag = (await client.head(sub)).etag;
-      final cachedEtag = (await storage.loadFilterList(sub.url))?.etag;
+      final cachedMetadata = await storage.loadFilterListMetadata(sub.url);
 
       // Skip fetching this list if cached ETag matches current ETag
-      if (etag != null && cachedEtag != null && etag == cachedEtag) {
+      if (etag != null && cachedMetadata != null && etag == cachedMetadata.etag) {
         observer.onEvent(FilterCacheMatch(sub.url));
-        return false;
+        return (changed: false, metadata: cachedMetadata);
       }
 
       // Parse list and save to cache if changes occurred
@@ -174,27 +204,105 @@ Future<bool> _checkAndFetchFilters({
         etag: response.etag ?? DateTime.now().microsecondsSinceEpoch.toString(),
         bytes: response.bytes,
       );
-      return true;
+      final updatedMetadata = await storage.loadFilterListMetadata(sub.url);
+      return (changed: true, metadata: updatedMetadata);
     } catch (e, st) {
       observer.onError(FilterFetchFailed('Failed: ${sub.url}', cause: '$e\n$st'));
-      return false;
+      final cachedMetadata = await storage.loadFilterListMetadata(sub.url);
+      return (changed: false, metadata: cachedMetadata);
     }
   });
 
   final results = await Future.wait(futures);
+  final metadataByUrl = <String, CachedFilterListMetadata>{};
+  for (var i = 0; i < subscriptions.length; i++) {
+    final metadata = results[i].metadata;
+    if (metadata != null) metadataByUrl[subscriptions[i].url] = metadata;
+  }
 
   final orphansDeleted = await storage.cleanupOrphanedFilterLists(
     subscriptions.map((s) => s.url).toList(),
   );
 
-  return orphansDeleted || results.any((changed) => changed);
+  return (
+    filtersChanged: orphansDeleted || results.any((result) => result.changed),
+    metadataByUrl: metadataByUrl,
+  );
+}
+
+Future<Map<String, CachedFilterListMetadata>> _loadSubscriptionMetadata({
+  required List<FilterSubscription> subscriptions,
+  required FilterStorage storage,
+}) async {
+  final metadataByUrl = <String, CachedFilterListMetadata>{};
+  for (final subscription in subscriptions) {
+    final metadata = await storage.loadFilterListMetadata(subscription.url);
+    if (metadata != null) metadataByUrl[subscription.url] = metadata;
+  }
+  return metadataByUrl;
+}
+
+bool _hasAllSubscriptionData({
+  required List<FilterSubscription> subscriptions,
+  required Map<String, CachedFilterListMetadata> metadataByUrl,
+}) {
+  for (final subscription in subscriptions) {
+    if (!metadataByUrl.containsKey(subscription.url)) return false;
+  }
+  return true;
 }
 
 /// Loads and validates the cached compiled filter engine bytes from disk.
-Future<Uint8List?> _loadCachedEngine(FilterStorage storage) async {
-  final cached = await storage.loadEngineBytes();
+Future<Uint8List?> _loadCachedEngine(
+  FilterStorage storage, {
+  required String cacheIdentity,
+}) async {
+  final cached = await storage.loadEngineBytes(cacheIdentity: cacheIdentity);
   if (cached == null) return null;
   return cached;
+}
+
+Future<String> _buildEngineCacheIdentity({
+  required List<FilterSubscription> subscriptions,
+  required Map<String, CachedFilterListMetadata> metadataByUrl,
+}) async => buildEngineCacheIdentityForTesting(
+  subscriptions: subscriptions,
+  metadataByUrl: metadataByUrl,
+);
+
+/// Builds the compiled-engine cache identity from subscription metadata only.
+@visibleForTesting
+String buildEngineCacheIdentityForTesting({
+  required List<FilterSubscription> subscriptions,
+  required Map<String, CachedFilterListMetadata> metadataByUrl,
+}) {
+  final entries = <Map<String, Object?>>[];
+
+  for (final subscription in subscriptions) {
+    final metadata = metadataByUrl[subscription.url];
+    entries.add({
+      'url': subscription.url,
+      'updateIntervalMicroseconds': subscription.updateInterval?.inMicroseconds,
+      'filterSha256': metadata?.payloadSha256,
+      'filterLength': metadata?.payloadLength,
+    });
+  }
+
+  entries.sort((a, b) {
+    final urlComparison = (a['url']! as String).compareTo(b['url']! as String);
+    if (urlComparison != 0) return urlComparison;
+    final aInterval = a['updateIntervalMicroseconds'] as int?;
+    final bInterval = b['updateIntervalMicroseconds'] as int?;
+    return (aInterval ?? -1).compareTo(bInterval ?? -1);
+  });
+
+  final payload = jsonEncode({
+    'engineCacheFormatVersion': _engineCacheFormatVersion,
+    'filterParserVersion': _filterParserVersion,
+    'subscriptions': entries,
+  });
+
+  return sha256.convert(utf8.encode(payload)).toString();
 }
 
 typedef _CompilerResult = ({Uint8List bytes, int totalRules});
@@ -204,18 +312,15 @@ Future<_CompilerResult> _parseAndBuildEngine({
   required List<FilterSubscription> subscriptions,
   required FilterStorage storage,
 }) async {
-  final allParsed = <Iterable<FilterRule>>[];
+  final deduped = <FilterRule>{};
 
   for (final sub in subscriptions) {
     final rawBytes = (await storage.loadFilterList(sub.url))?.data;
     if (rawBytes == null) continue;
 
     final parser = FilterListParserFactory.resolve(rawBytes);
-    allParsed.add(parser.parse(rawBytes));
+    deduped.addAll(FilterDeduplicator.deduplicate(parser.parse(rawBytes)));
   }
-
-  // 1. Merge and deduplicate to get flat rule list
-  final deduped = FilterDeduplicator.mergeAndDeduplicate(allParsed);
 
   // 2. Separate rules by type
   final networkRules = <FilterRule>[];
