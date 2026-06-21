@@ -347,6 +347,21 @@ void main() {
       expect(blockRule.excludeDomains, contains('b.com'));
     });
 
+    test('should parse hash-containing network rules without stealing cosmetic syntax', () {
+      final bytes = _bytes(
+        '||example.com/path#fragment^\nexample.com##.ad\nexample.com##+js(nowebrtc)',
+      );
+      final rules = parser.parse(bytes).toList();
+
+      expect(rules.length, 3);
+      expect(rules[0], isA<NetworkBlockRule>());
+      expect((rules[0] as NetworkBlockRule).pattern, '||example.com/path#fragment^');
+      expect(rules[1], isA<CosmeticHideRule>());
+      expect((rules[1] as CosmeticHideRule).selector, '.ad');
+      expect(rules[2], isA<ScriptletRule>());
+      expect((rules[2] as ScriptletRule).scriptletName, 'nowebrtc');
+    });
+
     test('should correctly parse cosmetic hiding rules', () {
       final bytes = _bytes('example.com##.banner-ad\n##.sponsored-post');
       final rules = parser.parse(bytes).toList();
@@ -480,6 +495,16 @@ void main() {
       test('should drop unsupported HTML filtering rules', () {
         final bytes = _bytes(
           'example.com\$\$script[tag-content="alert"]\nexample.com##^script:has-text(ad)\nexample.com\$@\$div.ad',
+        );
+        final rules = parser.parse(bytes).toList();
+
+        expect(rules, isEmpty);
+      });
+
+      test('should drop unsupported cosmetic and scriptlet exception syntaxes', () {
+        final bytes = _bytes(
+          "example.com#@\$#body { background: #000 !important; }\n"
+          "example.com#@%#//scriptlet('abort-on-property-read', 'ads')",
         );
         final rules = parser.parse(bytes).toList();
 

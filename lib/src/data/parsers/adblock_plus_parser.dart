@@ -55,11 +55,23 @@ class AdblockPlusParser implements FilterListParser {
       return null;
     }
 
-    if (line.contains('#')) {
+    if (_hasCosmeticOrScriptletSyntax(line)) {
       return _parseCosmeticOrScriptlet(line);
     }
 
     return _parseNetworkRule(line);
+  }
+
+  bool _hasCosmeticOrScriptletSyntax(String line) {
+    return line.contains('##+js(') ||
+        line.contains('#%#//scriptlet(') ||
+        line.contains('#@#') ||
+        line.contains('#@?#') ||
+        line.contains(r'#@$#') ||
+        line.contains('#@%#//scriptlet(') ||
+        line.contains(r'#$#') ||
+        line.contains('#?#') ||
+        line.contains('##');
   }
 
   FilterRule? _parseCosmeticOrScriptlet(String line) {
