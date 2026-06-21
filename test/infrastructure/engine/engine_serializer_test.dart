@@ -290,6 +290,21 @@ void main() {
       expect(deserialized2.domains, isEmpty);
     });
 
+    test('CosmeticHideRule preserves include and exclude domains after round trip', () {
+      const rule = CosmeticHideRule(
+        selector: '.ad-banner',
+        includeDomains: ['example.com'],
+        excludeDomains: ['sub.example.com'],
+      );
+
+      final deserialized = serializer.testRuleRoundTrip(rule) as CosmeticHideRule;
+
+      expect(deserialized.selector, rule.selector);
+      expect(deserialized.domains, ['example.com']);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
+
     test('CosmeticExceptionRule serialized and deserialized accurately', () {
       const rule = CosmeticExceptionRule(selector: '.safe-banner', domains: ['safe.com']);
 
@@ -297,6 +312,21 @@ void main() {
 
       expect(deserialized.selector, rule.selector);
       expect(deserialized.domains, rule.domains);
+    });
+
+    test('CosmeticExceptionRule preserves include and exclude domains after round trip', () {
+      const rule = CosmeticExceptionRule(
+        selector: '.safe-banner',
+        includeDomains: ['example.com'],
+        excludeDomains: ['sub.example.com'],
+      );
+
+      final deserialized = serializer.testRuleRoundTrip(rule) as CosmeticExceptionRule;
+
+      expect(deserialized.selector, rule.selector);
+      expect(deserialized.domains, ['example.com']);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
     });
 
     test(

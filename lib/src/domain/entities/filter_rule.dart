@@ -18,6 +18,8 @@ bool _listEquals<T>(List<T>? a, List<T>? b) {
   return true;
 }
 
+int _listHash<T>(List<T>? list) => list == null ? 0 : Object.hashAll(list);
+
 /// Represents a filter rule that can be applied to web content.
 sealed class FilterRule {
   const FilterRule();
@@ -164,11 +166,19 @@ final class CosmeticHideRule extends FilterRule {
   /// Creates a [CosmeticHideRule] instance.
   const CosmeticHideRule({
     required this.selector,
-    this.domains,
-  });
+    List<String>? domains,
+    List<String>? includeDomains,
+    this.excludeDomains,
+  }) : includeDomains = includeDomains ?? domains;
 
   /// The domains for which this rule should be applied. null = global rule.
-  final List<String>? domains;
+  final List<String>? includeDomains;
+
+  /// The domains for which this rule should not be applied.
+  final List<String>? excludeDomains;
+
+  /// Alias for [includeDomains], retained for indexing call sites.
+  List<String>? get domains => includeDomains;
 
   /// The CSS selector to match elements that should be hidden.
   final String selector;
@@ -178,10 +188,11 @@ final class CosmeticHideRule extends FilterRule {
       identical(this, other) ||
       (other is CosmeticHideRule &&
           selector == other.selector &&
-          _listEquals(domains, other.domains));
+          _listEquals(includeDomains, other.includeDomains) &&
+          _listEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => selector.hashCode;
+  int get hashCode => Object.hash(selector, _listHash(includeDomains), _listHash(excludeDomains));
 }
 
 /// A rule that prevents hiding elements on a webpage matching a specific CSS selector.
@@ -190,11 +201,19 @@ final class CosmeticExceptionRule extends FilterRule {
   /// Creates a [CosmeticExceptionRule] instance.
   const CosmeticExceptionRule({
     required this.selector,
-    this.domains,
-  });
+    List<String>? domains,
+    List<String>? includeDomains,
+    this.excludeDomains,
+  }) : includeDomains = includeDomains ?? domains;
 
   /// The domains for which this rule should be applied. null = global rule.
-  final List<String>? domains;
+  final List<String>? includeDomains;
+
+  /// The domains for which this rule should not be applied.
+  final List<String>? excludeDomains;
+
+  /// Alias for [includeDomains], retained for indexing call sites.
+  List<String>? get domains => includeDomains;
 
   /// The CSS selector to match elements that should not be hidden.
   final String selector;
@@ -204,10 +223,11 @@ final class CosmeticExceptionRule extends FilterRule {
       identical(this, other) ||
       (other is CosmeticExceptionRule &&
           selector == other.selector &&
-          _listEquals(domains, other.domains));
+          _listEquals(includeDomains, other.includeDomains) &&
+          _listEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => selector.hashCode ^ (domains?.first.hashCode ?? 0);
+  int get hashCode => Object.hash(selector, _listHash(includeDomains), _listHash(excludeDomains));
 }
 
 /// A rule that injects a scriptlet into a webpage.

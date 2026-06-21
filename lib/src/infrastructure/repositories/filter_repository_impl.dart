@@ -42,13 +42,17 @@ class FilterRepositoryImpl implements FilterRepository {
 
     for (final domain in domainChain) {
       engine.cosmeticExceptionRules[domain]?.forEach((ex) {
-        exceptionSelectors.add(ex.selector);
+        if (!_isCosmeticRuleExcluded(hostname, ex.excludeDomains)) {
+          exceptionSelectors.add(ex.selector);
+        }
       });
     }
 
     for (final domain in domainChain) {
       engine.cosmeticHideRules[domain]?.forEach((rule) {
-        if (!exceptionSelectors.contains(rule.selector) && seen.add(rule.selector)) {
+        if (!_isCosmeticRuleExcluded(hostname, rule.excludeDomains) &&
+            !exceptionSelectors.contains(rule.selector) &&
+            seen.add(rule.selector)) {
           result.add(rule);
           _observer?.onEvent(
             CosmeticCssInjected(hostname: hostname, selector: rule.selector),
@@ -95,5 +99,18 @@ class FilterRepositoryImpl implements FilterRepository {
     // Empty string and '*' are both used by serialized engines for global rules.
     yield '';
     yield '*';
+  }
+
+  bool _isCosmeticRuleExcluded(String hostname, List<String>? excludeDomains) {
+    if (excludeDomains == null) return false;
+
+    final normalizedHost = hostname.startsWith('www.') ? hostname.substring(4) : hostname;
+    for (final domain in excludeDomains) {
+      final normalizedDomain = domain.startsWith('www.') ? domain.substring(4) : domain;
+      if (normalizedHost == normalizedDomain || normalizedHost.endsWith('.$normalizedDomain')) {
+        return true;
+      }
+    }
+    return false;
   }
 }

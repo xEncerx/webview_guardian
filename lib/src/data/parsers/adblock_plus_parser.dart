@@ -125,19 +125,36 @@ class AdblockPlusParser implements FilterListParser {
 
     if (selector.isEmpty) return null;
 
-    List<String>? domains;
+    List<String>? includeDomains;
+    List<String>? excludeDomains;
     if (domainsPart.isNotEmpty) {
-      domains = domainsPart
-          .split(',')
-          .map((d) => d.trim())
-          .where((d) => d.isNotEmpty && !d.startsWith('~'))
-          .toList();
-      if (domains.isEmpty) domains = null;
+      final includes = <String>[];
+      final excludes = <String>[];
+      for (final rawDomain in domainsPart.split(',')) {
+        final domain = rawDomain.trim();
+        if (domain.isEmpty) continue;
+        if (domain.startsWith('~')) {
+          final excludedDomain = domain.substring(1).trim();
+          if (excludedDomain.isNotEmpty) excludes.add(excludedDomain);
+        } else {
+          includes.add(domain);
+        }
+      }
+      if (includes.isNotEmpty) includeDomains = includes;
+      if (excludes.isNotEmpty) excludeDomains = excludes;
     }
 
     return isException
-        ? CosmeticExceptionRule(selector: selector, domains: domains)
-        : CosmeticHideRule(selector: selector, domains: domains);
+        ? CosmeticExceptionRule(
+            selector: selector,
+            includeDomains: includeDomains,
+            excludeDomains: excludeDomains,
+          )
+        : CosmeticHideRule(
+            selector: selector,
+            includeDomains: includeDomains,
+            excludeDomains: excludeDomains,
+          );
   }
 
   FilterRule? _parseScriptlet(String line, String separator) {

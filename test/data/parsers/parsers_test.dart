@@ -556,6 +556,17 @@ void main() {
         expect(rule.selector, '.ads-wrapper');
       });
 
+      test('excluded domains are preserved separately from included domains', () {
+        final rules = parser.parse(_bytes('example.com,~sub.example.com##.ad')).toList();
+
+        expect(rules.length, 1);
+        final rule = rules.first as CosmeticHideRule;
+        expect(rule.domains, ['example.com']);
+        expect(rule.includeDomains, ['example.com']);
+        expect(rule.excludeDomains, ['sub.example.com']);
+        expect(rule.selector, '.ad');
+      });
+
       test('global rule (no domain) has null domains', () {
         final rules = parser.parse(_bytes('##.global-banner')).toList();
 
@@ -628,6 +639,17 @@ void main() {
         final rule = rules.first as CosmeticExceptionRule;
         expect(rule.domains, ['mafagames.com', 'telkomsel.com']);
         expect(rule.selector, '#adsContainer');
+      });
+
+      test('excluded exception domains are preserved separately from included domains', () {
+        final rules = parser.parse(_bytes('example.com,~sub.example.com#@#.ad')).toList();
+
+        expect(rules.length, 1);
+        final rule = rules.first as CosmeticExceptionRule;
+        expect(rule.domains, ['example.com']);
+        expect(rule.includeDomains, ['example.com']);
+        expect(rule.excludeDomains, ['sub.example.com']);
+        expect(rule.selector, '.ad');
       });
 
       test('exception with attribute selector', () {

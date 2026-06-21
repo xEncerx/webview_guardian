@@ -228,11 +228,13 @@ class EngineSerializer {
       case CosmeticHideRule():
         writer.writeUint8(_typeCosmeticHide);
         writer.writeString(rule.selector);
-        writer.writeNullableStringList(rule.domains);
+        writer.writeNullableStringList(rule.includeDomains);
+        writer.writeNullableStringList(rule.excludeDomains);
       case CosmeticExceptionRule():
         writer.writeUint8(_typeCosmeticException);
         writer.writeString(rule.selector);
-        writer.writeNullableStringList(rule.domains);
+        writer.writeNullableStringList(rule.includeDomains);
+        writer.writeNullableStringList(rule.excludeDomains);
       case ScriptletRule():
         writer.writeUint8(_typeScriptlet);
         writer.writeString(rule.scriptletName);
@@ -285,12 +287,14 @@ class EngineSerializer {
       case _typeCosmeticHide:
         return CosmeticHideRule(
           selector: reader.readString(),
-          domains: reader.readNullableStringList(),
+          includeDomains: reader.readNullableStringList(),
+          excludeDomains: reader.readNullableStringList(),
         );
       case _typeCosmeticException:
         return CosmeticExceptionRule(
           selector: reader.readString(),
-          domains: reader.readNullableStringList(),
+          includeDomains: reader.readNullableStringList(),
+          excludeDomains: reader.readNullableStringList(),
         );
       case _typeScriptlet:
         return ScriptletRule(
