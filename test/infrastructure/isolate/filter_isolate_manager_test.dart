@@ -290,6 +290,60 @@ example.com##.banner-ad
       },
     );
 
+    test('should fetch filters with GET when HEAD fails', () async {
+      final requests = <String>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        requests.add(request.method);
+        request.response.persistentConnection = false;
+        if (request.method == 'HEAD') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.set(HttpHeaders.etagHeader, 'get-etag')
+          ..write('''
+[Adblock Plus 2.0]
+||head-fallback.example^
+''');
+        await request.response.close();
+      });
+
+      final completer = Completer<(CompiledFilterEngine, bool, int)>();
+      final errors = <WebViewError>[];
+      final manager = FilterIsolateManager(
+        onEngineReady: (engine, fromCache, totalRules, _) =>
+            completer.complete((engine, fromCache, totalRules)),
+        onWorkerEvent: (_) {},
+        onWorkerError: errors.add,
+      );
+
+      try {
+        await manager.runBuildJob(
+          subscriptions: [
+            FilterSubscription(url: 'http://${server.address.address}:${server.port}/filters.txt'),
+          ],
+          httpOptions: const FilterHttpOptions(
+            connectTimeout: Duration(seconds: 1),
+            receiveTimeout: Duration(seconds: 1),
+          ),
+          storagePath: tempDir.path,
+        );
+        final result = await completer.future;
+
+        expect(requests, containsAllInOrder(['HEAD', 'GET']));
+        expect(errors.whereType<FilterFetchFailed>(), isEmpty);
+        expect(result.$2, isFalse);
+        expect(result.$3, greaterThan(0));
+      } finally {
+        manager.dispose();
+        await server.close(force: true);
+      }
+    });
+
     test(
       'should not restore cached engine for a changed subscription set after fetch failure',
       () async {

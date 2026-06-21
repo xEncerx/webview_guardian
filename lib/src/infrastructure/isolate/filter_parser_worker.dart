@@ -188,15 +188,20 @@ Future<_FetchResult> _checkAndFetchFilters({
     observer.onEvent(FilterListFetchStarted(sub.url));
 
     try {
-      final etag = (await client.head(sub)).etag;
-      final cachedMetadata = await storage.loadFilterListMetadata(sub.url);
-
-      // Skip fetching this list if cached ETag matches current ETag
-      if (etag != null && cachedMetadata != null && etag == cachedMetadata.etag) {
+      final cachedMetadata = await _loadCachedMetadataForMatchingHead(
+        client: client,
+        storage: storage,
+        subscription: sub,
+      );
+      if (cachedMetadata != null) {
         observer.onEvent(FilterCacheMatch(sub.url));
         return (changed: false, metadata: cachedMetadata);
       }
+    } catch (_) {
+      // Some hosts/CDNs do not support HEAD reliably; GET remains the authoritative fetch.
+    }
 
+    try {
       // Parse list and save to cache if changes occurred
       final response = await client.fetch(sub);
       await storage.saveFilterList(
@@ -228,6 +233,21 @@ Future<_FetchResult> _checkAndFetchFilters({
     filtersChanged: orphansDeleted || results.any((result) => result.changed),
     metadataByUrl: metadataByUrl,
   );
+}
+
+Future<CachedFilterListMetadata?> _loadCachedMetadataForMatchingHead({
+  required FilterListClient client,
+  required FilterStorage storage,
+  required FilterSubscription subscription,
+}) async {
+  final etag = (await client.head(subscription)).etag;
+  final cachedMetadata = await storage.loadFilterListMetadata(subscription.url);
+
+  if (etag != null && cachedMetadata != null && etag == cachedMetadata.etag) {
+    return cachedMetadata;
+  }
+
+  return null;
 }
 
 Future<Map<String, CachedFilterListMetadata>> _loadSubscriptionMetadata({
