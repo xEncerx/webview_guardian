@@ -23,16 +23,28 @@ class StreamWebViewObserver implements WebViewObserver {
   final _errorController = StreamController<WebViewError>.broadcast();
 
   /// Stream of WebView events emitted by the ad-blocker.
+  ///
+  /// The stream is closed when [dispose] is called. Events received after disposal are
+  /// ignored.
   Stream<WebViewEvent> get events => _eventController.stream;
 
   /// Stream of WebView errors emitted by the ad-blocker.
+  ///
+  /// The stream is closed when [dispose] is called. Errors received after disposal are
+  /// ignored.
   Stream<WebViewError> get errors => _errorController.stream;
 
   @override
-  void onEvent(WebViewEvent event) => _eventController.add(event);
+  void onEvent(WebViewEvent event) {
+    if (_eventController.isClosed) return;
+    _eventController.add(event);
+  }
 
   @override
-  void onError(WebViewError error) => _errorController.add(error);
+  void onError(WebViewError error) {
+    if (_errorController.isClosed) return;
+    _errorController.add(error);
+  }
 
   /// Disposes the observer and its resources.
   void dispose() {
