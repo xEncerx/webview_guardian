@@ -23,6 +23,13 @@ typedef OnWorkerEvent = void Function(WebViewEvent event);
 
 /// Called when the worker isolate emits a [WebViewError] via [IsolateWebViewObserver].
 typedef OnWorkerError = void Function(WebViewError error);
+
+/// Error used when a worker job is cancelled by disposing the manager.
+final class FilterIsolateJobCancelled implements Exception {
+  /// Creates a cancellation error for the active worker job.
+  const FilterIsolateJobCancelled();
+}
+
 typedef _PendingInit = ({
   List<FilterSubscription> subscriptions,
   FilterHttpOptions httpOptions,
@@ -73,34 +80,46 @@ class FilterIsolateManager implements FilterJobRunner {
 
   /// Spawns the worker isolate and sets up communication channels.
   Future<void> spawn({String? storagePath, bool useTestClient = false}) async {
-    dispose();
-    _receivePort = ReceivePort();
-    _errorPort = ReceivePort();
-    _isolate = await Isolate.spawn(
+    _disposeWorkerResources();
+    final receivePort = ReceivePort();
+    final errorPort = ReceivePort();
+    _receivePort = receivePort;
+    _errorPort = errorPort;
+    final isolate = await Isolate.spawn(
       filterParserWorkerEntry,
       (
-        sendPort: _receivePort!.sendPort,
+        sendPort: receivePort.sendPort,
         storagePath: storagePath,
         useTestClient: useTestClient,
       ),
       errorsAreFatal: false,
-      onError: _errorPort!.sendPort,
+      onError: errorPort.sendPort,
       debugName: 'FilterParserWorker',
     );
 
-    _errorPort!.listen((message) {
+    if (_receivePort != receivePort || _errorPort != errorPort) {
+      isolate.kill();
+      return;
+    }
+
+    _isolate = isolate;
+
+    errorPort.listen((message) {
       if (message is List && message.length == 2) {
         final error = message[0];
         final stackTrace = message[1];
         final workerError = IsolateCrashError('Isolate crashed', cause: '$error\n$stackTrace');
         _onWorkerError(workerError);
-        _activeJob?.completeError(workerError);
+        final activeJob = _activeJob;
         _activeJob = null;
+        if (activeJob != null && !activeJob.isCompleted) {
+          activeJob.completeError(workerError);
+        }
         dispose();
       }
     });
 
-    _receivePort!.listen(_handleMessage);
+    receivePort.listen(_handleMessage);
   }
 
   @override
@@ -109,29 +128,50 @@ class FilterIsolateManager implements FilterJobRunner {
     required FilterHttpOptions httpOptions,
     String? storagePath,
     bool useTestClient = false,
-  }) async {
+  }) {
     if (_activeJob != null) {
-      throw StateError('Filter isolate job is already running.');
+      return Future<void>.error(StateError('Filter isolate job is already running.'));
     }
 
     final completer = Completer<void>();
     _activeJob = completer;
-    await spawn(storagePath: storagePath, useTestClient: useTestClient);
-    sendSubscriptions(subscriptions: subscriptions, httpOptions: httpOptions);
+    unawaited(
+      spawn(storagePath: storagePath, useTestClient: useTestClient)
+          .then((_) {
+            if (_activeJob != completer || completer.isCompleted) return;
+            sendSubscriptions(subscriptions: subscriptions, httpOptions: httpOptions);
+          })
+          .onError((Object error, StackTrace stackTrace) {
+            if (_activeJob == completer) _activeJob = null;
+            if (!completer.isCompleted) completer.completeError(error, stackTrace);
+          }),
+    );
     return completer.future;
   }
 
   @override
-  Future<void> runClearCacheJob({String? storagePath, bool useTestClient = false}) async {
+  Future<void> runClearCacheJob({String? storagePath, bool useTestClient = false}) {
     if (_activeJob != null) {
-      throw StateError('Filter isolate job is already running.');
+      return Future<void>.error(StateError('Filter isolate job is already running.'));
     }
 
     final completer = Completer<void>();
     _activeJob = completer;
     _completeOnCacheClear = true;
-    await spawn(storagePath: storagePath, useTestClient: useTestClient);
-    sendClearCacheCommand();
+    unawaited(
+      spawn(storagePath: storagePath, useTestClient: useTestClient)
+          .then((_) {
+            if (_activeJob != completer || completer.isCompleted) return;
+            sendClearCacheCommand();
+          })
+          .onError((Object error, StackTrace stackTrace) {
+            if (_activeJob == completer) {
+              _activeJob = null;
+              _completeOnCacheClear = false;
+            }
+            if (!completer.isCompleted) completer.completeError(error, stackTrace);
+          }),
+    );
     return completer.future;
   }
 
@@ -162,6 +202,11 @@ class FilterIsolateManager implements FilterJobRunner {
   /// Sends a shutdown command to the worker isolate and cleans up resources.
   @override
   void dispose() {
+    _cancelActiveJob();
+    _disposeWorkerResources();
+  }
+
+  void _disposeWorkerResources() {
     _workerSendPort?.send(ShutdownCommand());
     _receivePort?.close();
     _errorPort?.close();
@@ -228,5 +273,13 @@ class FilterIsolateManager implements FilterJobRunner {
     _activeJob = null;
     if (!activeJob.isCompleted) activeJob.complete();
     dispose();
+  }
+
+  void _cancelActiveJob() {
+    final activeJob = _activeJob;
+    _activeJob = null;
+    _completeOnCacheClear = false;
+    if (activeJob == null || activeJob.isCompleted) return;
+    activeJob.completeError(const FilterIsolateJobCancelled());
   }
 }

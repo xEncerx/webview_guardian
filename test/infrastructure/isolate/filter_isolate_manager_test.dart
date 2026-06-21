@@ -97,6 +97,74 @@ example.com##.banner-ad
       expect(engines, hasLength(2));
     });
 
+    test('dispose should complete the active build job with cancellation error', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final job = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      manager.dispose();
+
+      await expectLater(
+        job.timeout(const Duration(seconds: 5)),
+        throwsA(isA<FilterIsolateJobCancelled>()),
+      );
+    });
+
+    test('dispose should complete the active clear cache job with cancellation error', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final job = manager.runClearCacheJob(
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      manager.dispose();
+
+      await expectLater(
+        job.timeout(const Duration(seconds: 5)),
+        throwsA(isA<FilterIsolateJobCancelled>()),
+      );
+    });
+
+    test('concurrent runBuildJob rejection should be a failed future', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final activeJob = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+      final rejectedJob = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      await expectLater(rejectedJob, throwsA(isA<StateError>()));
+
+      manager.dispose();
+      await expectLater(activeJob, throwsA(isA<FilterIsolateJobCancelled>()));
+    });
+
     test('runBuildJob should complete after terminal cache restore failure', () async {
       final errors = <WebViewError>[];
       final invalidStoragePath = File('${tempDir.path}/not_a_directory')..writeAsStringSync('x');
