@@ -11,15 +11,16 @@ class FilterMatcher {
 
   /// Matches a network request against all filter rules to determine the appropriate action.
   FilterDecision matchNetworkRequest(NetworkRequest request) {
-    if (_engineRef.current.totalRules == 0) return const Allow();
+    final engine = _engineRef.current;
+    if (engine.totalRules == 0) return const Allow();
 
     FilterRule? bestMatch;
     var highestWeight = 0;
 
     // 1. Hostname Trie Search (Domain Rules)
     final host = request.host;
-    final buffer = _engineRef.current.trieBuffer;
-    final trieRules = _engineRef.current.trieRules;
+    final buffer = engine.trieBuffer;
+    final trieRules = engine.trieRules;
 
     var offset = 0;
 
@@ -82,7 +83,7 @@ class FilterMatcher {
 
     // 2. Token Dispatch (Search by 5-character patterns inside URL)
     request.url.anyTokenMatches((token) {
-      final rulesBucket = _engineRef.current.tokenDispatchTable[token];
+      final rulesBucket = engine.tokenDispatchTable[token];
       if (rulesBucket != null) {
         for (var r = 0; r < rulesBucket.length; r++) {
           final rule = rulesBucket[r];
@@ -102,7 +103,7 @@ class FilterMatcher {
     if (highestWeight == 4) return const Allow();
 
     // 3. Fallback Rules (All rules not in Trie or Tokens)
-    for (final rule in _engineRef.current.fallbackRules) {
+    for (final rule in engine.fallbackRules) {
       if (rule.matchesRequest(request)) {
         final w = rule.ruleWeight;
         if (w > highestWeight) {

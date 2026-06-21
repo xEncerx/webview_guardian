@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:test/test.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
@@ -56,6 +58,49 @@ void main() {
   }
 
   group('Basic Search Algorithms (Isolation Tests)', () {
+    test('Empty engine exposes a valid empty trie root', () {
+      final engine = CompiledFilterEngine.empty();
+
+      expect(engine.trieBuffer, hasLength(1));
+      expect(engine.trieBuffer.single, 0);
+    });
+
+    test('Empty engine allows requests without throwing', () {
+      final matcher = FilterMatcher(FilterEngineRef(CompiledFilterEngine.empty()));
+
+      expect(
+        () => matcher.matchNetworkRequest(req('https://example.com/script.js')),
+        returnsNormally,
+      );
+      expect(
+        matcher.matchNetworkRequest(req('https://example.com/script.js')),
+        isA<Allow>(),
+      );
+    });
+
+    test('Valid empty trie root still evaluates token rules', () {
+      final engine = CompiledFilterEngine(
+        totalRules: 1,
+        trieBuffer: Uint32List.fromList([0]),
+        trieRules: const [],
+        tokenDispatchTable: {
+          'banner'.extractTokensAsInt().first: [
+            const NetworkBlockRule(pattern: 'banner'),
+          ],
+        },
+        fallbackRules: const {},
+        cosmeticHideRules: const {},
+        cosmeticExceptionRules: const {},
+        scriptletRules: const {},
+        cssInjectRules: const {},
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://site.com/ad/banner.png'));
+
+      expect(result, isA<Block>());
+    });
+
     test('Trie: Exact domain match', () {
       final engine = buildEngine(
         trieRules: [const NetworkBlockRule(pattern: '||example.com^')],

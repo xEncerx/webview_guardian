@@ -21,7 +21,7 @@ class CompiledFilterEngine {
   factory CompiledFilterEngine.empty() {
     return CompiledFilterEngine(
       totalRules: 0,
-      trieBuffer: Uint32List(0),
+      trieBuffer: Uint32List(1),
       trieRules: const [],
       tokenDispatchTable: const {},
       fallbackRules: const {},
