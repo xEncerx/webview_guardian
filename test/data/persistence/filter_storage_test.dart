@@ -34,7 +34,11 @@ void main() {
 
     test('loads filter list metadata without payload bytes', () async {
       final bytes = Uint8List.fromList([1, 2, 3, 4]);
-      await storage.saveFilterList(url: 'https://filters.test/list.txt', etag: 'etag-1', bytes: bytes);
+      await storage.saveFilterList(
+        url: 'https://filters.test/list.txt',
+        etag: 'etag-1',
+        bytes: bytes,
+      );
 
       final metadata = await storage.loadFilterListMetadata('https://filters.test/list.txt');
 
@@ -57,12 +61,15 @@ void main() {
 
     test('loads legacy filter metadata and backfills payload hash sidecar', () async {
       final bytes = Uint8List.fromList([1, 2, 3, 4]);
-      await storage.saveFilterList(url: 'https://filters.test/list.txt', etag: 'etag-1', bytes: bytes);
+      await storage.saveFilterList(
+        url: 'https://filters.test/list.txt',
+        etag: 'etag-1',
+        bytes: bytes,
+      );
 
-      final filterFile = Directory('${tempDir.path}/adblocker/filter_lists')
-          .listSync()
-          .whereType<File>()
-          .singleWhere((file) => file.path.endsWith('.bin'));
+      final filterFile = Directory(
+        '${tempDir.path}/adblocker/filter_lists',
+      ).listSync().whereType<File>().singleWhere((file) => file.path.endsWith('.bin'));
       final metadataFile = File('${filterFile.path}.json');
       await metadataFile.delete();
 
@@ -79,10 +86,9 @@ void main() {
         etag: 'etag-1',
         bytes: Uint8List.fromList([1, 2, 3, 4]),
       );
-      final filterFile = Directory('${tempDir.path}/adblocker/filter_lists')
-          .listSync()
-          .whereType<File>()
-          .singleWhere((file) => file.path.endsWith('.bin'));
+      final filterFile = Directory(
+        '${tempDir.path}/adblocker/filter_lists',
+      ).listSync().whereType<File>().singleWhere((file) => file.path.endsWith('.bin'));
       final metadataFile = File('${filterFile.path}.json');
 
       await storage.cleanupOrphanedFilterLists(['https://filters.test/list.txt']);

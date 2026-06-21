@@ -69,6 +69,7 @@ class AppController extends ChangeNotifier {
       await adblockService.init(
         subscriptions: _toFilterSubscriptions(_subscriptionUrls),
         observer: observer,
+        observabilityOptions: const WebViewObservabilityOptions(emitAllowedRequests: true),
         storagePath: _adblockDirectory!.path,
       );
       _statusMessage = 'Adblock service initialized.';

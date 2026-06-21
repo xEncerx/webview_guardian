@@ -19,6 +19,7 @@ export 'src/domain/domain.dart'
         ScriptletInjected,
         WebViewError,
         WebViewEvent,
+        WebViewObservabilityOptions,
         WebViewObserver;
 export 'src/infrastructure/observability/stream_webview_observer.dart' show StreamWebViewObserver;
 export 'src/infrastructure/services/adblock_service.dart' show AdblockService;

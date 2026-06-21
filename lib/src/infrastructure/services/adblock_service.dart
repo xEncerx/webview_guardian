@@ -35,6 +35,7 @@ class AdblockService {
   FilterRepositoryImpl? _repository;
   InjectionOrchestrator? _orchestrator;
   WebViewObserver? _observer;
+  WebViewObservabilityOptions _observabilityOptions = const WebViewObservabilityOptions();
   TrafficInterceptor? _trafficInterceptor;
 
   final List<FilterSubscription> _subscriptions = [];
@@ -111,6 +112,10 @@ class AdblockService {
   ///   network calls, use [StreamWebViewObserver] which safely delegates work
   ///   to background listeners without blocking the ad-blocking engine.
   ///
+  /// - **[observabilityOptions]**: Controls which repository-level events are
+  ///   emitted to [observer]. [RequestAllowed] is disabled by default because it
+  ///   can be very high volume during request interception.
+  ///
   /// - **[storagePath]**: Optional custom directory path for storing downloaded
   ///   filter lists and compiled engine caches. If not provided, defaults to
   ///   the application's support directory.
@@ -118,6 +123,7 @@ class AdblockService {
     required List<FilterSubscription> subscriptions,
     FilterHttpOptions httpOptions = const FilterHttpOptions(),
     WebViewObserver? observer,
+    WebViewObservabilityOptions observabilityOptions = const WebViewObservabilityOptions(),
     String? storagePath,
   }) {
     _ensureNotDisposed();
@@ -129,6 +135,7 @@ class AdblockService {
       subscriptions: subscriptions,
       httpOptions: httpOptions,
       observer: observer,
+      observabilityOptions: observabilityOptions,
       storagePath: storagePath,
     );
   }
@@ -137,6 +144,7 @@ class AdblockService {
     required List<FilterSubscription> subscriptions,
     required FilterHttpOptions httpOptions,
     required WebViewObserver? observer,
+    required WebViewObservabilityOptions observabilityOptions,
     required String? storagePath,
   }) async {
     PlatformInAppWebViewController.debugLoggingSettings.enabled = false;
@@ -147,6 +155,7 @@ class AdblockService {
         ..addAll(subscriptions);
       _httpOptions = httpOptions;
       _observer = observer;
+      _observabilityOptions = observabilityOptions;
 
       _storagePath = storagePath ?? (await getApplicationSupportDirectory()).path;
       if (_isDisposed) return;
@@ -185,6 +194,7 @@ class AdblockService {
         matcher: FilterMatcher(_engineRef),
         engineRef: _engineRef,
         observer: _observer,
+        observabilityOptions: _observabilityOptions,
       );
       _orchestrator = InjectionOrchestrator(_repository!);
       _trafficInterceptor = TrafficInterceptorFactory.create(_repository!);

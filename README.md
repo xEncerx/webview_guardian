@@ -128,7 +128,7 @@ adblockService.isReady.addListener(() {
 - **`isEnabled`**: You can toggle the ad-blocker on and off dynamically by setting `adblockService.isEnabled = true/false`.
 - **`isReady`**: A `ValueNotifier<bool>` that indicates whether the filter engine is loaded and ready.
 - **`ruleCount` & `ruleCountStream`**: You can easily retrieve the total number of currently active rules synchronously via `ruleCount`, or build reactive UIs (like `StreamBuilder`) using the `ruleCountStream` to get real-time updates when the engine recompiles.
-- **`init()`**: Takes a list of `FilterSubscription`s, optional `FilterHttpOptions` for network requests, and an optional `WebViewObserver`. Call it once before using `updateSubscriptions()` or `clearCache()`.
+- **`init()`**: Takes a list of `FilterSubscription`s, optional `FilterHttpOptions` for network requests, an optional `WebViewObserver`, and optional `WebViewObservabilityOptions`. Call it once before using `updateSubscriptions()` or `clearCache()`.
 
 #### Network Configuration with FilterHttpOptions
 
@@ -223,6 +223,8 @@ final observer = StreamWebViewObserver(delegates: [MyLogger()]);
 await adblockService.init(
   subscriptions: mySubscriptions,
   observer: observer,
+  // RequestAllowed is high volume, so enable it only when your UI or analytics need it.
+  observabilityOptions: const WebViewObservabilityOptions(emitAllowedRequests: true),
 );
 
 // Now you can use streams for reactive UI updates
@@ -278,6 +280,27 @@ await adblockService.init(
 );
 ```
 
+`AdblockService.init()` accepts `observabilityOptions` to control repository-level event volume. Defaults are:
+
+| Option                     | Default | Controls                     |
+| -------------------------- | ------- | ---------------------------- |
+| `emitBlockedRequests`      | `true`  | `RequestBlocked` events      |
+| `emitAllowedRequests`      | `false` | `RequestAllowed` events      |
+| `emitCosmeticInjections`   | `true`  | `CosmeticCssInjected` events |
+| `emitScriptletInjections`  | `true`  | `ScriptletInjected` events   |
+
+`RequestAllowed` is disabled by default because it can fire for every allowed intercepted request. Enable it explicitly only when needed:
+
+```dart
+await adblockService.init(
+  subscriptions: mySubscriptions,
+  observer: observer,
+  observabilityOptions: const WebViewObservabilityOptions(
+    emitAllowedRequests: true,
+  ),
+);
+```
+
 ### WebViewEvent Types
 
 | Event                     | Trigger                                        | Description                                      |
@@ -288,7 +311,7 @@ await adblockService.init(
 | `FilterCacheCleared`      | When the filter cache is cleared               | Indicates all cached data was removed.           |
 | `FilterCacheMatch`        | When a filter list matches cache (no download) | Contains the URL that matched cache.             |
 | `RequestBlocked`          | When a network request is blocked              | Contains the blocked URL.                        |
-| `RequestAllowed`          | When a network request is allowed              | Contains the allowed URL.                        |
+| `RequestAllowed`          | When a network request is allowed              | Contains the allowed URL. Disabled by default; opt in with `WebViewObservabilityOptions(emitAllowedRequests: true)`. |
 | `ScriptletInjected`       | When a scriptlet is injected into a page       | Contains hostname and scriptlet name.            |
 | `CosmeticCssInjected`     | When cosmetic CSS is injected into a page      | Contains hostname and CSS selector.              |
 

@@ -8,13 +8,16 @@ class FilterRepositoryImpl implements FilterRepository {
     required FilterMatcher matcher,
     required FilterEngineRef engineRef,
     required WebViewObserver? observer,
+    WebViewObservabilityOptions observabilityOptions = const WebViewObservabilityOptions(),
   }) : _matcher = matcher,
        _engineRef = engineRef,
-       _observer = observer;
+       _observer = observer,
+       _observabilityOptions = observabilityOptions;
 
   final FilterMatcher _matcher;
   final FilterEngineRef _engineRef;
   final WebViewObserver? _observer;
+  final WebViewObservabilityOptions _observabilityOptions;
 
   @override
   FilterDecision lookupNetworkRequest(NetworkRequest request) {
@@ -22,9 +25,13 @@ class FilterRepositoryImpl implements FilterRepository {
 
     switch (decision) {
       case Block():
-        _observer?.onEvent(RequestBlocked(request.url));
+        if (_observabilityOptions.emitBlockedRequests) {
+          _observer?.onEvent(RequestBlocked(request.url));
+        }
       case Allow():
-        _observer?.onEvent(RequestAllowed(request.url));
+        if (_observabilityOptions.emitAllowedRequests) {
+          _observer?.onEvent(RequestAllowed(request.url));
+        }
     }
 
     return decision;
@@ -54,9 +61,11 @@ class FilterRepositoryImpl implements FilterRepository {
             !exceptionSelectors.contains(rule.selector) &&
             seen.add(rule.selector)) {
           result.add(rule);
-          _observer?.onEvent(
-            CosmeticCssInjected(hostname: hostname, selector: rule.selector),
-          );
+          if (_observabilityOptions.emitCosmeticInjections) {
+            _observer?.onEvent(
+              CosmeticCssInjected(hostname: hostname, selector: rule.selector),
+            );
+          }
         }
       });
     }
@@ -74,9 +83,11 @@ class FilterRepositoryImpl implements FilterRepository {
       engine.scriptletRules[domain]?.forEach((rule) {
         if (seen.add(rule.scriptletName)) {
           result.add(rule);
-          _observer?.onEvent(
-            ScriptletInjected(hostname: hostname, scriptletName: rule.scriptletName),
-          );
+          if (_observabilityOptions.emitScriptletInjections) {
+            _observer?.onEvent(
+              ScriptletInjected(hostname: hostname, scriptletName: rule.scriptletName),
+            );
+          }
         }
       });
     }
