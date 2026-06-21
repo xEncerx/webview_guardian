@@ -19,31 +19,35 @@ class HttpFilterListClient implements FilterListClient {
 
   @override
   Future<FilterFetchResult> fetch(FilterSubscription subscription) async {
-    final request = await _client.getUrl(Uri.parse(subscription.url));
+    final uri = Uri.parse(subscription.url);
+    final request = await _client.getUrl(uri);
     _applyHeaders(request);
 
     final response = await request.close().timeout(_options.receiveTimeout);
+    await _validateSuccessfulResponse(response, uri);
 
     final builder = BytesBuilder(copy: false);
     await response.forEach(builder.add).timeout(_options.receiveTimeout);
 
-    return FilterFetchResult(
-      bytes: builder.takeBytes(),
-      etag: response.headers.value('etag'),
-    );
+    return FilterFetchResult(bytes: builder.takeBytes(), etag: response.headers.value('etag'));
   }
 
   @override
   Future<FilterHeadResult> head(FilterSubscription subscription) async {
-    final request = await _client.headUrl(Uri.parse(subscription.url));
+    final uri = Uri.parse(subscription.url);
+    final request = await _client.headUrl(uri);
     _applyHeaders(request);
 
     final response = await request.close().timeout(_options.receiveTimeout);
+    await _validateSuccessfulResponse(response, uri);
     await response.drain<void>();
 
-    return FilterHeadResult(
-      etag: response.headers.value('etag'),
-    );
+    return FilterHeadResult(etag: response.headers.value('etag'));
+  }
+
+  /// Closes the underlying HTTP client and releases any idle connections.
+  void close({bool force = false}) {
+    _client.close(force: force);
   }
 
   void _applyHeaders(HttpClientRequest request) {
@@ -80,12 +84,7 @@ class HttpFilterListClient implements FilterListClient {
       final password = parts.length > 1 ? parts.sublist(1).join(':') : '';
 
       _client
-        ..addProxyCredentials(
-          host,
-          port,
-          'Basic',
-          HttpClientBasicCredentials(username, password),
-        )
+        ..addProxyCredentials(host, port, 'Basic', HttpClientBasicCredentials(username, password))
         // Fallback for proxies with non-standard or unknown realm names.
         // Without this, if the realm doesn't match 'Basic', the 407 challenge
         // won't find the pre-registered credentials and the request will fail.
@@ -99,5 +98,22 @@ class HttpFilterListClient implements FilterListClient {
           return true;
         };
     }
+  }
+
+  Future<void> _validateSuccessfulResponse(HttpClientResponse response, Uri uri) async {
+    if (response.statusCode >= HttpStatus.ok && response.statusCode < HttpStatus.multipleChoices) {
+      return;
+    }
+
+    final reasonPhrase = response.reasonPhrase;
+    final reasonSuffix = reasonPhrase.isEmpty ? '' : ' $reasonPhrase';
+    final responseUri = response.redirects.isNotEmpty ? response.redirects.last.location : uri;
+
+    await response.drain<void>().timeout(_options.receiveTimeout);
+
+    throw HttpException(
+      'Failed to fetch filter list: HTTP ${response.statusCode}$reasonSuffix',
+      uri: responseUri,
+    );
   }
 }
