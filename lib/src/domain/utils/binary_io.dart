@@ -2,22 +2,29 @@ import 'dart:typed_data';
 
 import 'package:webview_guardian/src/domain/entities/resource_type.dart';
 import 'package:webview_guardian/src/domain/extensions/byte_extensions.dart';
+import 'package:webview_guardian/src/domain/utils/growable_buffers.dart';
 import 'package:webview_guardian/src/domain/utils/utf8.dart';
 
 /// A simple binary writer for serializing data in a compact format.
 class BinaryWriter {
-  Uint8List _buffer = Uint8List(1024 * 1024); // Start with 1MB
-  late ByteData _data = ByteData.sublistView(_buffer);
+  /// Creates a binary writer with a small initial capacity by default.
+  BinaryWriter([int initialCapacity = BufferCapacityPolicy.initialByteCapacity])
+    : _buffer = Uint8List(initialCapacity <= 0 ? 1 : initialCapacity) {
+    _data = ByteData.sublistView(_buffer);
+  }
+
+  Uint8List _buffer;
+  late ByteData _data;
   int _offset = 0;
 
   static const Endian _endian = Endian.little;
 
+  /// Current allocated byte capacity.
+  int get capacity => _buffer.length;
+
   void _ensureCapacity(int needed) {
     if (_offset + needed > _buffer.length) {
-      var newSize = _buffer.length * 2;
-      while (_offset + needed > newSize) {
-        newSize *= 2;
-      }
+      final newSize = BufferCapacityPolicy.grow(_buffer.length, _offset + needed);
       final newBuffer = Uint8List(newSize)..setRange(0, _offset, _buffer);
       _buffer = newBuffer;
       _data = ByteData.sublistView(_buffer);

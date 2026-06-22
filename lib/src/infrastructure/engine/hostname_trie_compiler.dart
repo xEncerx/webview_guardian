@@ -69,13 +69,13 @@ typedef CompiledTrie = ({Uint32List buffer, List<FilterRule> rules});
 extension TrieFlattener on HostnameTrieCompiler {
   /// Compiles the raw object-based Trie into a flat memory buffer.
   CompiledTrie build() {
-    final builder = _Uint32Builder();
+    final builder = Uint32ListBuilder();
     final rules = <FilterRule>[];
 
     _writeNode(root, builder, rules);
 
     return (
-      buffer: builder.toBytes(),
+      buffer: builder.toList(),
       rules: rules,
     );
   }
@@ -83,7 +83,7 @@ extension TrieFlattener on HostnameTrieCompiler {
   /// Recursively writes the node into the buffer using DFS.
   ///
   /// Returns the offset index where the node was written.
-  int _writeNode(RawTrieNode node, _Uint32Builder builder, List<FilterRule> rulesList) {
+  int _writeNode(RawTrieNode node, Uint32ListBuilder builder, List<FilterRule> rulesList) {
     final offset = builder.length;
     final childCount = node.children.length;
     final ruleCount = node.rules.length;
@@ -130,31 +130,5 @@ extension TrieFlattener on HostnameTrieCompiler {
     }
 
     return offset;
-  }
-}
-
-/// A zero-allocation builder for Uint32List that doubles capacity instead of reallocating on every add.
-class _Uint32Builder {
-  _Uint32Builder([int initialCapacity = 1024 * 1024]) : _buffer = Uint32List(initialCapacity);
-
-  Uint32List _buffer;
-  int _length = 0;
-
-  void add(int value) {
-    if (_length == _buffer.length) {
-      final newBuffer = Uint32List(_buffer.length * 2)..setRange(0, _buffer.length, _buffer);
-      _buffer = newBuffer;
-    }
-    _buffer[_length++] = value;
-  }
-
-  void set(int index, int value) {
-    _buffer[index] = value;
-  }
-
-  int get length => _length;
-
-  Uint32List toBytes() {
-    return Uint32List.sublistView(_buffer, 0, _length);
   }
 }
