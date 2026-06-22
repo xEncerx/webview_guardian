@@ -83,6 +83,8 @@ class _WebViewState extends State<WebView> {
 
   late final WebUri _initialUri;
   String? _initialHost;
+  List<UserScript>? _initialScripts;
+  String? _initialPreloadedHost;
   String? _lastInjectedHost;
 
   @override
@@ -93,6 +95,7 @@ class _WebViewState extends State<WebView> {
       mediaPlaybackRequiresUserGesture: false,
       transparentBackground: true,
       useShouldInterceptRequest: true,
+      useShouldOverrideUrlLoading: widget.adblockService != null,
       mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
       thirdPartyCookiesEnabled: false,
       allowsLinkPreview: false,
@@ -157,6 +160,7 @@ class _WebViewState extends State<WebView> {
         widget.onWebViewCreated?.call(WebViewController(controller));
       },
       shouldInterceptRequest: _shouldInterceptRequest,
+      shouldOverrideUrlLoading: widget.adblockService == null ? null : _shouldOverrideUrlLoading,
       onLoadStart: (controller, url) async {
         widget.onLoadStart?.call(url);
 
@@ -194,6 +198,20 @@ class _WebViewState extends State<WebView> {
     return intercept(controller, request);
   }
 
+  Future<NavigationActionPolicy> _shouldOverrideUrlLoading(
+    InAppWebViewController controller,
+    NavigationAction navigationAction,
+  ) async {
+    if (navigationAction.isForMainFrame) {
+      final url = navigationAction.request.url;
+      if (url != null) {
+        await _applyInjections(controller, url.host);
+      }
+    }
+
+    return NavigationActionPolicy.ALLOW;
+  }
+
   List<UserScript> _getScriptsForHost(String? hostname) {
     if (hostname == null) return [];
 
@@ -211,15 +229,23 @@ class _WebViewState extends State<WebView> {
   }
 
   List<UserScript> _getInitialScripts() {
+    return _initialScripts ??= _buildInitialScripts();
+  }
+
+  List<UserScript> _buildInitialScripts() {
     final scripts = _getScriptsForHost(_initialHost);
     if (scripts.isNotEmpty) {
-      _lastInjectedHost = _initialHost;
+      _initialPreloadedHost = _initialHost;
     }
     return scripts;
   }
 
   Future<void> _applyInjections(InAppWebViewController controller, String hostname) async {
     if (_lastInjectedHost == hostname) return;
+    if (_initialPreloadedHost == hostname) {
+      _initialPreloadedHost = null;
+      return;
+    }
     if (!_canBuildInjections) return;
 
     final scripts = _getScriptsForHost(hostname);

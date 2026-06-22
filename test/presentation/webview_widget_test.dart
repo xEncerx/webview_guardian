@@ -121,5 +121,162 @@ void main() {
         greaterThan(0),
       );
     });
+
+    testWidgets('provides initial document-start scripts when adblock is ready', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final scripts = webView.platform.params.initialUserScripts!;
+
+      expect(scripts, hasLength(1));
+      expect(scripts.single.source, contains('example.com'));
+      expect(scripts.single.injectionTime, UserScriptInjectionTime.AT_DOCUMENT_START);
+    });
+
+    testWidgets('does not re-install same-host initial scripts from onLoadStart', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+      expect(webViewParams.initialUserScripts, isNotEmpty);
+
+      webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
+      await tester.pump();
+
+      verifyNever(() => controller.removeAllUserScripts());
+      verifyNever(() => controller.addUserScript(userScript: any(named: 'userScript')));
+    });
+
+    testWidgets('parent rebuild does not rearm initial preload skip', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+      final shouldOverrideUrlLoading = webViewParams.shouldOverrideUrlLoading!;
+
+      webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
+      await tester.pump();
+
+      await shouldOverrideUrlLoading(
+        controller,
+        NavigationAction(
+          isForMainFrame: true,
+          request: URLRequest(url: WebUri('https://other.example')),
+        ),
+      );
+      clearInteractions(controller);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      await shouldOverrideUrlLoading(
+        controller,
+        NavigationAction(
+          isForMainFrame: true,
+          request: URLRequest(url: WebUri('https://example.com')),
+        ),
+      );
+
+      verify(() => controller.removeAllUserScripts()).called(1);
+      final captured = verify(
+        () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
+      ).captured.cast<UserScript>();
+      expect(captured, hasLength(1));
+      expect(captured.single.source, contains('example.com'));
+    });
+
+    testWidgets('does not enable navigation override without adblock service', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: WebView(initialUrl: 'https://example.com'),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+
+      expect(webViewParams.initialSettings?.useShouldOverrideUrlLoading, isFalse);
+      expect(webViewParams.shouldOverrideUrlLoading, isNull);
+    });
+
+    testWidgets('updates host scripts before allowing a main-frame navigation', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+      final shouldOverrideUrlLoading = webViewParams.shouldOverrideUrlLoading;
+
+      expect(webViewParams.initialSettings?.useShouldOverrideUrlLoading, isTrue);
+      expect(shouldOverrideUrlLoading, isNotNull);
+
+      final policy = await shouldOverrideUrlLoading!(
+        controller,
+        NavigationAction(
+          isForMainFrame: true,
+          request: URLRequest(url: WebUri('https://other.example')),
+        ),
+      );
+
+      expect(policy, NavigationActionPolicy.ALLOW);
+      verify(() => controller.removeAllUserScripts()).called(1);
+      final captured = verify(
+        () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
+      ).captured.cast<UserScript>();
+      expect(captured, hasLength(1));
+      expect(captured.single.source, contains('other.example'));
+      expect(captured.single.injectionTime, UserScriptInjectionTime.AT_DOCUMENT_START);
+    });
   });
 }
