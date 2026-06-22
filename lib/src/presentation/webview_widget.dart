@@ -90,20 +90,7 @@ class _WebViewState extends State<WebView> {
   @override
   void initState() {
     super.initState();
-    _settings = InAppWebViewSettings(
-      isInspectable: kDebugMode,
-      mediaPlaybackRequiresUserGesture: false,
-      transparentBackground: true,
-      useShouldInterceptRequest: true,
-      useShouldOverrideUrlLoading: widget.adblockService != null,
-      mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
-      thirdPartyCookiesEnabled: false,
-      allowsLinkPreview: false,
-      resourceCustomSchemes: ['adblock'],
-      // // Disable Hybrid Composition on Android to prevent visual glitches
-      // // and "Renderer process crash" when closing the WebView.
-      // useHybridComposition: defaultTargetPlatform != TargetPlatform.android,
-    );
+    _settings = _buildSettings();
 
     _initialUri = WebUri(widget.initialUrl);
     try {
@@ -159,7 +146,7 @@ class _WebViewState extends State<WebView> {
         _controller = controller;
         widget.onWebViewCreated?.call(WebViewController(controller));
       },
-      shouldInterceptRequest: _shouldInterceptRequest,
+      shouldInterceptRequest: widget.adblockService == null ? null : _shouldInterceptRequest,
       shouldOverrideUrlLoading: widget.adblockService == null ? null : _shouldOverrideUrlLoading,
       onLoadStart: (controller, url) async {
         widget.onLoadStart?.call(url);
@@ -179,6 +166,25 @@ class _WebViewState extends State<WebView> {
       onUpdateVisitedHistory: (_, url, isReload) =>
           widget.onUpdateVisitedHistory?.call(url, isReload),
       onProgressChanged: (_, progress) => widget.onProgressChanged?.call(progress),
+    );
+  }
+
+  InAppWebViewSettings _buildSettings() {
+    final hasAdblock = widget.adblockService != null;
+
+    return InAppWebViewSettings(
+      isInspectable: kDebugMode,
+      mediaPlaybackRequiresUserGesture: false,
+      transparentBackground: hasAdblock ? true : null,
+      useShouldInterceptRequest: hasAdblock,
+      useShouldOverrideUrlLoading: hasAdblock,
+      mixedContentMode: hasAdblock ? MixedContentMode.MIXED_CONTENT_NEVER_ALLOW : null,
+      thirdPartyCookiesEnabled: hasAdblock ? false : null,
+      allowsLinkPreview: hasAdblock ? false : null,
+      resourceCustomSchemes: hasAdblock ? ['adblock'] : null,
+      // // Disable Hybrid Composition on Android to prevent visual glitches
+      // // and "Renderer process crash" when closing the WebView.
+      // useHybridComposition: defaultTargetPlatform != TargetPlatform.android,
     );
   }
 

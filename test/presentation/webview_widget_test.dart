@@ -224,7 +224,7 @@ void main() {
       expect(captured.single.source, contains('example.com'));
     });
 
-    testWidgets('does not enable navigation override without adblock service', (
+    testWidgets('does not enable adblock-specific settings without adblock service', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -235,9 +235,17 @@ void main() {
 
       final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
       final webViewParams = webView.platform.params;
+      final settings = webViewParams.initialSettings;
 
-      expect(webViewParams.initialSettings?.useShouldOverrideUrlLoading, isFalse);
+      expect(settings?.useShouldOverrideUrlLoading, isFalse);
+      expect(settings?.useShouldInterceptRequest, isFalse);
+      expect(settings?.mixedContentMode, isNull);
+      expect(settings?.thirdPartyCookiesEnabled, isNull);
+      expect(settings?.transparentBackground, isNull);
+      expect(settings?.allowsLinkPreview, isNull);
+      expect(settings?.resourceCustomSchemes, isNull);
       expect(webViewParams.shouldOverrideUrlLoading, isNull);
+      expect(webViewParams.shouldInterceptRequest, isNull);
     });
 
     testWidgets('updates host scripts before allowing a main-frame navigation', (
