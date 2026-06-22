@@ -167,6 +167,18 @@ The `WebView` widget is a wrapper around `InAppWebView`.
 - **`enablePullToRefresh`**: Whether to enable pull-to-refresh functionality. Defaults to false.
 - **`pullToRefreshSettings`**: Customization for the pull-to-refresh behavior and appearance. Use `WebViewPullToRefreshSettings`.
 
+#### Android Rendering Note
+
+If you see visual glitches when closing a screen that contains `WebView`, first try updating Flutter to the latest stable version. As of Flutter 3.44, enabling Flutter's experimental HCPP renderer can also help on affected Android devices. Add this application-level flag to your Android manifest:
+
+```xml
+<meta-data
+    android:name="io.flutter.embedding.android.EnableHcpp"
+    android:value="true" />
+```
+
+This is an Android rendering workaround, not an adblock setting, so the package does not enable it automatically.
+
 #### WebView Widget Callbacks
 
 | Callback                 | Parameters                       | Description                                   |

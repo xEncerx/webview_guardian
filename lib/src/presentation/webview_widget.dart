@@ -182,9 +182,6 @@ class _WebViewState extends State<WebView> {
       thirdPartyCookiesEnabled: hasAdblock ? false : null,
       allowsLinkPreview: hasAdblock ? false : null,
       resourceCustomSchemes: hasAdblock ? ['adblock'] : null,
-      // // Disable Hybrid Composition on Android to prevent visual glitches
-      // // and "Renderer process crash" when closing the WebView.
-      // useHybridComposition: defaultTargetPlatform != TargetPlatform.android,
     );
   }
 
