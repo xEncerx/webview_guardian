@@ -1,175 +1,393 @@
-[![Powered by flutter_inappwebview](https://img.shields.io/badge/Powered%20by-flutter__inappwebview-blue.svg)](https://github.com/pichillilorenzo/flutter_inappwebview) 
+[![Powered by flutter_inappwebview](https://img.shields.io/badge/Powered%20by-flutter__inappwebview-blue.svg)](https://github.com/pichillilorenzo/flutter_inappwebview)
 [![style: very good analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
 
+# webview_guardian
 
-# WebView with Adblock
+`webview_guardian` is a Flutter WebView wrapper with optional ad blocking. You can use it as a regular WebView, or pass an `AdblockService` to block network requests and apply cosmetic filters.
 
-A custom wrapper package for `flutter_inappwebview` that provides an ad-blocking engine out of the box. It supports both network request interception and cosmetic filtering (CSS/JS injection).
+The package is built on top of [`flutter_inappwebview`](https://github.com/pichillilorenzo/flutter_inappwebview).
 
-### Supported Platforms
+## Supported Platforms
 
-| Android | Windows |     iOS      |    macOS     |    Linux     | Web |
-| :-----: | :-----: | :----------: | :----------: | :----------: | :-: |
-|   ✅    |   ✅    | 🚧 (Planned) | 🚧 (Planned) | 🚧 (Planned) | ❌  |
+| Android | Windows | iOS | macOS | Linux | Web |
+| :-----: | :-----: | :-: | :---: | :---: | :-: |
+|   ✅   |   ✅   | 🚧  |  🚧   |  🚧   | ❌  |
 
-## Features
+## Installation
 
-- **Network Request Interception:** Blocks network requests matching ad, tracker, and malware domains.
-- **Cosmetic Filters (CSS/JS Injection):** Hides ad placeholders and injects scriptlets to bypass anti-adblockers.
-- **High Performance & Low Latency:**
-  - **Isolates:** Parsing and compilation of filter lists are offloaded to a background Isolate, preventing UI blocking.
-  - **Advanced Matching Algorithms:** Uses **Hostname Trie Search** for domain rules and **Token Dispatch** (searching by 5-character patterns inside the URL) for incredibly fast request matching.
-- **Filter Engine Caching:** Compiled rules are serialized and cached locally, allowing the engine to start instantly on subsequent app launches.
-- **Multiple Filter Formats:** Supports `Hosts`, `Domain`, and `Adblock Plus` formats.
-  _(Note: To guarantee low latency on mobile, the Adblock Plus parser intentionally ignores heavy rules like regex and procedural cosmetics)._
-- **Auto-Updates:** Keep your filter lists fresh with background timers.
-- **Rich Observability:** Monitor the adblock engine's state and blocked requests using `WebViewObserver` or `StreamWebViewObserver` (with reactive streams).
+The package is not published on pub.dev yet. Add it from GitHub:
 
-## Table of Contents
+```yaml
+dependencies:
+  webview_guardian:
+    git:
+      url: https://github.com/xEncerx/webview_guardian.git
+      ref: main
+```
 
-- [WebView with Adblock](#webview-with-adblock)
-    - [Supported Platforms](#supported-platforms)
-  - [Features](#features)
-  - [Table of Contents](#table-of-contents)
-  - [Quick Start](#quick-start)
-    - [1. Initialize the AdblockService](#1-initialize-the-adblockservice)
-    - [2. Use the WebView Widget](#2-use-the-webview-widget)
-    - [3. Reacting to Service Readiness](#3-reacting-to-service-readiness)
-  - [Core Components Usage](#core-components-usage)
-    - [A. AdblockService Configuration](#a-adblockservice-configuration)
-      - [Network Configuration with FilterHttpOptions](#network-configuration-with-filterhttpoptions)
-    - [B. WebView Widget](#b-webview-widget)
-      - [WebView Widget Callbacks](#webview-widget-callbacks)
-    - [C. WebViewController](#c-webviewcontroller)
-      - [Available Methods](#available-methods)
-  - [Observing Events](#observing-events)
-    - [1. Using StreamWebViewObserver (Recommended for UI)](#1-using-streamwebviewobserver-recommended-for-ui)
-    - [2. Using WebViewObserver Directly (For Simple Logging/Debugging)](#2-using-webviewobserver-directly-for-simple-loggingdebugging)
-    - [WebViewEvent Types](#webviewevent-types)
-    - [WebViewError Types](#webviewerror-types)
-  - [Cache and Memory Management](#cache-and-memory-management)
+Then fetch dependencies:
+
+```sh
+flutter pub get
+```
 
 ## Quick Start
 
-The ad-blocking functionality is entirely **optional**. The `WebView` widget will function as a standard browser if no `AdblockService` is provided.
-
-For the best performance, `AdblockService` should be initialized as a **singleton** (e.g., using `get_it` or provider) when your app starts, and then passed to the `WebView` widget.
-
-### 1. Initialize the AdblockService
-
-```dart
-import 'package:webview_guardian/webview_guardian.dart';
-
-// Initialize this once in your main() or DI setup
-final adblockService = AdblockService();
-
-await adblockService.init(
-  subscriptions: [
-    FilterSubscription(
-      url: 'https://easylist.to/easylist/easylist.txt',
-      // updateInterval is optional. If omitted, updates only on app start.
-      updateInterval: const Duration(hours: 1),
-    ),
-  ],
-);
-```
-
-### 2. Use the WebView Widget
+Create one `AdblockService`, initialize it once, and pass it to `WebView`.
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:webview_guardian/webview_guardian.dart';
 
-class MyBrowserScreen extends StatelessWidget {
+class BrowserPage extends StatefulWidget {
+  const BrowserPage({super.key});
+
+  @override
+  State<BrowserPage> createState() => _BrowserPageState();
+}
+
+class _BrowserPageState extends State<BrowserPage> {
+  final AdblockService _adblockService = AdblockService();
+  late final Future<void> _initAdblock;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAdblock = _adblockService.init(
+      subscriptions: const [
+        FilterSubscription(
+          url: 'https://easylist.to/easylist/easylist.txt',
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _adblockService.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Browser')),
-      body: WebView(
-        initialUrl: 'https://example.com',
-        // Pass your singleton AdblockService here
-        adblockService: adblockService,
-        onWebViewCreated: (controller) {
-          // Use WebViewController to manage navigation
-        },
-      ),
+    return FutureBuilder<void>(
+      future: _initAdblock,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Adblock init failed: ${snapshot.error}'));
+        }
+
+        return WebView(
+          initialUrl: 'https://example.com',
+          adblockService: _adblockService,
+        );
+      },
     );
   }
 }
 ```
 
-### 3. Reacting to Service Readiness
+`AdblockService.init()` must complete before you call `updateSubscriptions()` or `clearCache()`.
 
-Since `isReady` is a `ValueNotifier<bool>`, you can reactively listen to its state:
+## Use WebView Without Adblock
+
+Ad blocking is optional. If you do not pass `adblockService`, the widget behaves like a normal WebView wrapper.
 
 ```dart
-// Using ValueListenableBuilder
-ValueListenableBuilder<bool>(
-  valueListenable: adblockService.isReady,
-  builder: (context, isReady, child) {
-    return Text(isReady ? 'Adblock ready' : 'Loading...');
+WebView(
+  initialUrl: 'https://example.com',
+  onWebViewCreated: (controller) async {
+    final url = await controller.getUrl();
+    debugPrint('Current URL: $url');
   },
 )
-
-// Or listen directly
-adblockService.isReady.addListener(() {
-  if (adblockService.isReady.value) {
-    print('Filter engine is ready!');
-  }
-});
 ```
 
-## Core Components Usage
+## Use Adblock With Your Own InAppWebView
 
-### A. AdblockService Configuration
+The `WebView` widget already wires the adblock service into `InAppWebView`. If you need a custom `InAppWebView` setup, use `InAppWebViewAdblockAdapter` directly.
 
-`AdblockService` orchestrates everything: background updates, isolate management, and rule evaluation.
+Use one long-lived `AdblockService`, but create one adapter per `InAppWebView` instance. Do not share one adapter between tabs or widgets because it stores per-WebView script injection state.
 
-- **`isEnabled`**: You can toggle the ad-blocker on and off dynamically by setting `adblockService.isEnabled = true/false`.
-- **`isReady`**: A `ValueNotifier<bool>` that indicates whether the filter engine is loaded and ready.
-- **`ruleCount` & `ruleCountStream`**: You can easily retrieve the total number of currently active rules synchronously via `ruleCount`, or build reactive UIs (like `StreamBuilder`) using the `ruleCountStream` to get real-time updates when the engine recompiles.
-- **`init()`**: Takes a list of `FilterSubscription`s, optional `FilterHttpOptions` for network requests, an optional `WebViewObserver`, and optional `WebViewObservabilityOptions`. Call it once before using `updateSubscriptions()` or `clearCache()`.
+```dart
+import 'dart:collection';
 
-#### Network Configuration with FilterHttpOptions
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:webview_guardian/webview_guardian.dart';
 
-When initializing `AdblockService`, you can customize network behavior using `FilterHttpOptions`:
+class CustomWebView extends StatefulWidget {
+  const CustomWebView({
+    required this.adblockService,
+    super.key,
+  });
+
+  final AdblockService adblockService;
+
+  @override
+  State<CustomWebView> createState() => _CustomWebViewState();
+}
+
+class _CustomWebViewState extends State<CustomWebView> {
+  static final WebUri _initialUri = WebUri('https://example.com');
+
+  late final InAppWebViewAdblockAdapter _adapter;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _adapter = InAppWebViewAdblockAdapter(
+      adblockService: widget.adblockService,
+      baseSettings: InAppWebViewSettings(
+        isInspectable: kDebugMode,
+        mediaPlaybackRequiresUserGesture: false,
+      ),
+      initialUrl: Uri.parse(_initialUri.toString()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _adapter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InAppWebView(
+      initialUrlRequest: URLRequest(url: _initialUri),
+      initialSettings: _adapter.initialSettings,
+      initialUserScripts: UnmodifiableListView(_adapter.initialUserScripts),
+      shouldInterceptRequest: _adapter.shouldInterceptRequest,
+      shouldOverrideUrlLoading: _adapter.shouldOverrideUrlLoading,
+      onLoadStart: (controller, url) async {
+        await _adapter.onLoadStart(controller, url);
+      },
+    );
+  }
+}
+```
+
+The adapter applies the settings required for request interception and adblock script injection. Pass your own `baseSettings` if you need additional `InAppWebViewSettings`; the adapter will copy them and enable the required adblock settings on top.
+
+## Configure Filters
+
+Each filter list is described by `FilterSubscription`.
 
 ```dart
 await adblockService.init(
-  subscriptions: mySubscriptions,
-  httpOptions: FilterHttpOptions(
-    connectTimeout: const Duration(seconds: 15),  // Connection timeout
-    receiveTimeout: const Duration(seconds: 60), // Response timeout
-    headers: {
-      'User-Agent': 'MyApp/1.0',
-      'Accept': 'text/plain',
-    },
-    proxy: 'http://proxy.example.com:8080',      // Optional proxy
+  subscriptions: const [
+    FilterSubscription(
+      url: 'https://easylist.to/easylist/easylist.txt',
+      updateInterval: Duration(hours: 24),
+    ),
+  ],
+);
+```
+
+`updateInterval` defaults to 24 hours. Set it to `null` if you do not want automatic periodic updates for that subscription.
+
+To replace subscriptions after initialization:
+
+```dart
+await adblockService.updateSubscriptions([
+  const FilterSubscription(
+    url: 'https://easylist.to/easylist/easylist.txt',
+  ),
+  const FilterSubscription(
+    url: 'https://easylist.to/easylist/easyprivacy.txt',
+  ),
+]);
+```
+
+`updateSubscriptions()` returns `Future<void>`. Await it before reading state that depends on the updated filters.
+
+## Manage Adblock State
+
+Useful `AdblockService` members:
+
+| API                  | Description                                                         |
+| -------------------- | ------------------------------------------------------------------- |
+| `isEnabled`          | Enables or disables blocking without rebuilding filters.            |
+| `isReady`            | `ValueNotifier<bool>` that becomes `true` when the engine is ready. |
+| `ruleCount`          | Current number of loaded rules.                                     |
+| `ruleCountStream`    | Emits rule count changes after rebuilds.                            |
+| `repository`         | Active `FilterRepository`, available after initialization.          |
+| `orchestrator`       | Active injection orchestrator, available after initialization.      |
+| `trafficInterceptor` | Active traffic interceptor, available after initialization.         |
+
+Toggle blocking:
+
+```dart
+adblockService.isEnabled = false;
+adblockService.isEnabled = true;
+```
+
+Clear cached filter lists and compiled engines:
+
+```dart
+await adblockService.clearCache();
+```
+
+`clearCache()` clears the in-memory engine and completes after the background cache clear job finishes.
+
+## Observe Events
+
+Use `StreamWebViewObserver` when you want to show logs or counters in the UI.
+
+```dart
+final observer = StreamWebViewObserver(delegates: const <WebViewObserver>[]);
+
+await adblockService.init(
+  subscriptions: const [
+    FilterSubscription(url: 'https://easylist.to/easylist/easylist.txt'),
+  ],
+  observer: observer,
+);
+
+final subscription = observer.events.listen((event) {
+  switch (event) {
+    case RequestBlocked(:final url):
+      debugPrint('Blocked: $url');
+    case EngineCompiled(:final totalRules):
+      debugPrint('Compiled rules: $totalRules');
+    case EngineRestoredFromCache(:final totalRules):
+      debugPrint('Restored rules: $totalRules');
+    default:
+      debugPrint('Adblock event: $event');
+  }
+});
+
+// Later, when you no longer need the observer:
+await subscription.cancel();
+observer.dispose();
+```
+
+`RequestAllowed` events are disabled by default because they can be emitted very often. Enable them only if your UI or analytics needs them:
+
+```dart
+await adblockService.init(
+  subscriptions: const [
+    FilterSubscription(url: 'https://easylist.to/easylist/easylist.txt'),
+  ],
+  observer: observer,
+  observabilityOptions: const WebViewObservabilityOptions(
+    emitAllowedRequests: true,
   ),
 );
 ```
 
-**FilterHttpOptions Parameters:**
+Other observability options:
 
-| Parameter        | Type                  | Default | Description                                                                                  |
-| ---------------- | --------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `connectTimeout` | `Duration`            | 15s     | Maximum time to wait for establishing a connection.                                          |
-| `receiveTimeout` | `Duration`            | 60s     | Maximum time to wait for a complete response.                                                |
-| `headers`        | `Map<String, String>` | `{}`    | Custom headers added to all filter list requests.                                            |
-| `proxy`          | `String?`             | `null`  | Proxy URL for requests. Supports `http://`, `https://`, `socks4://` and `socks5://` formats. |
+| Option                    | Default | Controls                      |
+| ------------------------- | ------- | ----------------------------- |
+| `emitBlockedRequests`     | `true`  | `RequestBlocked` events.      |
+| `emitAllowedRequests`     | `false` | `RequestAllowed` events.      |
+| `emitCosmeticInjections`  | `true`  | `CosmeticCssInjected` events. |
+| `emitScriptletInjections` | `true`  | `ScriptletInjected` events.   |
 
-### B. WebView Widget
+## Configure Filter List Requests
 
-The `WebView` widget is a wrapper around `InAppWebView`.
+Use `FilterHttpOptions` to configure how remote filter lists are downloaded.
 
-- **`initialUrl`**: The starting page.
-- **`adblockService`**: If provided, intercepts requests and applies cosmetic injections.
-- **`enablePullToRefresh`**: Whether to enable pull-to-refresh functionality. Defaults to false.
-- **`pullToRefreshSettings`**: Customization for the pull-to-refresh behavior and appearance. Use `WebViewPullToRefreshSettings`.
+```dart
+await adblockService.init(
+  subscriptions: const [
+    FilterSubscription(url: 'https://easylist.to/easylist/easylist.txt'),
+  ],
+  httpOptions: const FilterHttpOptions(
+    connectTimeout: Duration(seconds: 15),
+    receiveTimeout: Duration(seconds: 60),
+    headers: {
+      'User-Agent': 'MyApp/1.0',
+    },
+    proxy: 'http://proxy.example.com:8080',
+  ),
+);
+```
 
-#### Android Rendering Note
+`proxy` supports `http://`, `https://`, `socks4://`, and `socks5://` URLs.
 
-If you see visual glitches when closing a screen that contains `WebView`, first try updating Flutter to the latest stable version. As of Flutter 3.44, enabling Flutter's experimental HCPP renderer can also help on affected Android devices. Add this application-level flag to your Android manifest:
+## WebView API
+
+`WebView` accepts these commonly used parameters:
+
+| Parameter                | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `initialUrl`             | URL loaded when the widget is created.                        |
+| `adblockService`         | Optional `AdblockService`. Omit it to disable ad blocking.    |
+| `enablePullToRefresh`    | Enables pull-to-refresh where supported. Defaults to `false`. |
+| `pullToRefreshSettings`  | Colors and size for pull-to-refresh.                          |
+| `gestureRecognizers`     | Gestures consumed by the WebView.                             |
+| `onWebViewCreated`       | Gives you a `WebViewController`.                              |
+| `onLoadStart`            | Called when navigation starts.                                |
+| `onLoadStop`             | Called when navigation finishes.                              |
+| `onProgressChanged`      | Called with loading progress from 0 to 100.                   |
+| `onUpdateVisitedHistory` | Called when visited history changes.                          |
+| `onReceivedError`        | Called when a resource loading error occurs.                  |
+
+Controller methods:
+
+| Method                              | Description                                                  |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `loadUrl(String url)`               | Loads a URL.                                                 |
+| `goBack()`                          | Navigates back.                                              |
+| `goForward()`                       | Navigates forward.                                           |
+| `canGoBack()`                       | Returns whether back navigation is available.                |
+| `canGoForward()`                    | Returns whether forward navigation is available.             |
+| `reload()`                          | Reloads the current page.                                    |
+| `stopLoading()`                     | Stops loading.                                               |
+| `getUrl()`                          | Returns the current URL as `String?`.                        |
+| `evaluateJavascript(String source)` | Runs JavaScript after the page is ready enough to handle it. |
+
+Example with navigation controls:
+
+```dart
+WebViewController? controller;
+
+WebView(
+  initialUrl: 'https://example.com',
+  adblockService: adblockService,
+  onWebViewCreated: (createdController) {
+    controller = createdController;
+  },
+  onLoadStop: (url) async {
+    final title = await controller?.evaluateJavascript('document.title');
+    debugPrint('Loaded $url with title: $title');
+  },
+)
+```
+
+## Pull To Refresh
+
+```dart
+WebView(
+  initialUrl: 'https://example.com',
+  enablePullToRefresh: true,
+  pullToRefreshSettings: const WebViewPullToRefreshSettings(
+    color: Colors.blue,
+    backgroundColor: Colors.white,
+  ),
+)
+```
+
+Pull-to-refresh is only active on platforms supported by `flutter_inappwebview`.
+
+## Filter Format Notes
+
+The package supports common hosts/domain lists and a practical subset of Adblock Plus network and cosmetic rules. Heavy Adblock Plus features such as regular-expression network rules and procedural cosmetics are intentionally not supported.
+
+## Android Rendering Note
+
+If you see visual glitches when closing a screen that contains `WebView`, first try updating Flutter to the latest stable version. As of Flutter 3.44, enabling Flutter's experimental HCPP renderer can also help on affected Android devices.
+
+Add this application-level flag to your Android manifest:
 
 ```xml
 <meta-data
@@ -178,167 +396,3 @@ If you see visual glitches when closing a screen that contains `WebView`, first 
 ```
 
 This is an Android rendering workaround, not an adblock setting, so the package does not enable it automatically.
-
-#### WebView Widget Callbacks
-
-| Callback                 | Parameters                       | Description                                   |
-| ------------------------ | -------------------------------- | --------------------------------------------- |
-| `onWebViewCreated`       | `(WebViewController controller)` | Called when the controller is ready.          |
-| `onLoadStart`            | `(Uri? url)`                     | Called when a page starts loading.            |
-| `onLoadStop`             | `(Uri? url)`                     | Called when a page finishes loading.          |
-| `onProgressChanged`      | `(int progress)`                 | Called when loading progress changes (0-100). |
-| `onUpdateVisitedHistory` | `(Uri? url, bool? isReload)`     | Called when visited history is updated.       |
-| `onReceivedError`        | `(Uri url, String errorDetails)` | Called when a resource loading error occurs.  |
-
-### C. WebViewController
-
-When `onWebViewCreated` fires, it yields a `WebViewController`. This acts as a facade over `InAppWebViewController` to safely manage browser navigation, history, and scripts without exposing the underlying implementation details.
-
-#### Available Methods
-
-| Method                              | Returns           | Description                     |
-| ----------------------------------- | ----------------- | ------------------------------- |
-| `loadUrl(String url)`               | `Future<void>`    | Loads the given URL.            |
-| `goBack()`                          | `Future<void>`    | Navigates back in history.      |
-| `goForward()`                       | `Future<void>`    | Navigates forward in history.   |
-| `canGoBack()`                       | `Future<bool>`    | Checks if can navigate back.    |
-| `canGoForward()`                    | `Future<bool>`    | Checks if can navigate forward. |
-| `reload()`                          | `Future<void>`    | Reloads the current page.       |
-| `stopLoading()`                     | `Future<void>`    | Stops the current page loading. |
-| `getUrl()`                          | `Future<String?>` | Returns the current URL.        |
-| `evaluateJavascript(String source)` | `Future<dynamic>` | Evaluates JavaScript code.      |
-
-## Observing Events
-
-You can monitor the internal workings of the adblock engine using `StreamWebViewObserver` or a simple `WebViewObserver` implementation.
-
-### 1. Using StreamWebViewObserver (Recommended for UI)
-
-`StreamWebViewObserver` is a special `WebViewObserver` that broadcasts events and errors to multiple delegate observers and exposes them as streams for reactive UI updates:
-
-```dart
-import 'package:webview_guardian/webview_guardian.dart';
-
-// Create delegate observers for logging, analytics, etc.
-class MyLogger implements WebViewObserver {
-  @override
-  void onEvent(WebViewEvent event) => print('Event: $event');
-
-  @override
-  void onError(WebViewError error) => print('Error: $error');
-}
-
-// Create StreamWebViewObserver with delegates
-final observer = StreamWebViewObserver(delegates: [MyLogger()]);
-
-// Pass it to the service during init
-await adblockService.init(
-  subscriptions: mySubscriptions,
-  observer: observer,
-  // RequestAllowed is high volume, so enable it only when your UI or analytics need it.
-  observabilityOptions: const WebViewObservabilityOptions(emitAllowedRequests: true),
-);
-
-// Now you can use streams for reactive UI updates
-StreamBuilder<WebViewEvent>(
-  stream: observer.events,
-  builder: (context, snapshot) {
-    if (snapshot.hasData) {
-      final event = snapshot.data!;
-      if (event is RequestBlocked) {
-        return Text('Blocked: ${event.url}');
-      } else if (event is EngineCompiled) {
-        return Text('Engine ready: ${event.totalRules} rules');
-      }
-    }
-    return const SizedBox.shrink();
-  },
-);
-
-// Listen to errors
-observer.errors.listen((error) {
-  print('Adblock Error: ${error.message}');
-});
-
-// Dispose observers you create when they are no longer needed.
-observer.dispose();
-```
-
-### 2. Using WebViewObserver Directly (For Simple Logging/Debugging)
-
-For simple use cases, you can implement `WebViewObserver` directly without streams:
-
-```dart
-class MyObserver implements WebViewObserver {
-  @override
-  void onEvent(WebViewEvent event) {
-    if (event is RequestBlocked) {
-      print('Blocked: ${event.url}');
-    } else if (event is EngineCompiled) {
-      print('Compiled ${event.totalRules} rules in ${event.compilationTime}');
-    }
-  }
-
-  @override
-  void onError(WebViewError error) {
-    print('Adblock Error: ${error.message}');
-  }
-}
-
-// During init:
-await adblockService.init(
-  subscriptions: mySubscriptions,
-  observer: MyObserver(),
-);
-```
-
-`AdblockService.init()` accepts `observabilityOptions` to control repository-level event volume. Defaults are:
-
-| Option                     | Default | Controls                     |
-| -------------------------- | ------- | ---------------------------- |
-| `emitBlockedRequests`      | `true`  | `RequestBlocked` events      |
-| `emitAllowedRequests`      | `false` | `RequestAllowed` events      |
-| `emitCosmeticInjections`   | `true`  | `CosmeticCssInjected` events |
-| `emitScriptletInjections`  | `true`  | `ScriptletInjected` events   |
-
-`RequestAllowed` is disabled by default because it can fire for every allowed intercepted request. Enable it explicitly only when needed:
-
-```dart
-await adblockService.init(
-  subscriptions: mySubscriptions,
-  observer: observer,
-  observabilityOptions: const WebViewObservabilityOptions(
-    emitAllowedRequests: true,
-  ),
-);
-```
-
-### WebViewEvent Types
-
-| Event                     | Trigger                                        | Description                                      |
-| ------------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| `FilterListFetchStarted`  | When fetching a filter list begins             | Contains the URL being fetched.                  |
-| `EngineCompiled`          | When the filter engine finishes compiling      | Contains total rules count and compilation time. |
-| `EngineRestoredFromCache` | When the engine is loaded from cache           | Contains cached rules count and restore time.    |
-| `FilterCacheCleared`      | When the filter cache is cleared               | Indicates all cached data was removed.           |
-| `FilterCacheMatch`        | When a filter list matches cache (no download) | Contains the URL that matched cache.             |
-| `RequestBlocked`          | When a network request is blocked              | Contains the blocked URL.                        |
-| `RequestAllowed`          | When a network request is allowed              | Contains the allowed URL. Disabled by default; opt in with `WebViewObservabilityOptions(emitAllowedRequests: true)`. |
-| `ScriptletInjected`       | When a scriptlet is injected into a page       | Contains hostname and scriptlet name.            |
-| `CosmeticCssInjected`     | When cosmetic CSS is injected into a page      | Contains hostname and CSS selector.              |
-
-### WebViewError Types
-
-| Error                | Trigger                             | Description                                  |
-| -------------------- | ----------------------------------- | -------------------------------------------- |
-| `FilterFetchFailed`  | Failed to download filter list      | Network or parsing error during fetch.       |
-| `CacheRestoreFailed` | Failed to restore engine from cache | Corrupted or incompatible cache file.        |
-| `EngineBuildFailed`  | Failed to compile filter rules      | Error during rule compilation.               |
-| `EngineInitFailed`   | Failed to initialize engine         | General initialization failure.              |
-| `IsolateCrashError`  | Background isolate crashed          | The parsing isolate terminated unexpectedly. |
-
-## Cache and Memory Management
-
-- **`await clearCache()`**: Clears all downloaded filters and compiled engine files from the device storage. It also clears the in-memory engine immediately and completes after the cache clear job finishes.
-- **`await updateSubscriptions()`**: Replaces the currently active subscriptions and completes after the effective background update finishes. Multiple pending updates are collapsed so only the latest subscription list is built.
-- **`dispose()`**: Cancels all update timers and shuts down the background isolate. Make sure to call this if your app completely tears down the service. Observers passed to `init()` remain caller-owned and should be disposed by the code that created them.
