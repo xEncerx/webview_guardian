@@ -15,7 +15,11 @@ class CosmeticCSSScript implements InjectionScript {
 
   @override
   String? buildScript(String hostname, FilterRepository repo) {
-    final rules = repo.getCosmeticRules(hostname);
+    return buildScriptFromRules(repo.getCosmeticRules(hostname));
+  }
+
+  /// Builds a cosmetic CSS user script from already selected rules.
+  String? buildScriptFromRules(List<CosmeticHideRule> rules) {
     if (rules.isEmpty) return null;
 
     final cssRules = rules.map((r) => '${r.selector} { display: none !important; }').join(r'\n');

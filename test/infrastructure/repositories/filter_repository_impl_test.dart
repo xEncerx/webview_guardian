@@ -92,6 +92,20 @@ void main() {
       expect(observer.events.whereType<CosmeticCssInjected>(), isEmpty);
     });
 
+    test('does not emit cosmetic injection events while querying rules', () {
+      const rule = CosmeticHideRule(selector: '.ad');
+      final observer = _RecordingObserver();
+      final repository = repositoryFor(
+        engine: _engineWithCosmeticRules({
+          'example.com': [rule],
+        }),
+        observer: observer,
+      );
+
+      expect(repository.getCosmeticRules('example.com'), [rule]);
+      expect(observer.events.whereType<CosmeticCssInjected>(), isEmpty);
+    });
+
     test('does not emit scriptlet injection events when disabled', () {
       const rule = ScriptletRule(scriptletName: 'abort-on-property-read');
       final observer = _RecordingObserver();
@@ -101,6 +115,20 @@ void main() {
         }),
         observer: observer,
         observabilityOptions: const WebViewObservabilityOptions(emitScriptletInjections: false),
+      );
+
+      expect(repository.getScriptletRules('example.com'), [rule]);
+      expect(observer.events.whereType<ScriptletInjected>(), isEmpty);
+    });
+
+    test('does not emit scriptlet injection events while querying rules', () {
+      const rule = ScriptletRule(scriptletName: 'abort-on-property-read');
+      final observer = _RecordingObserver();
+      final repository = repositoryFor(
+        engine: _engineWithScriptletRules({
+          'example.com': [rule],
+        }),
+        observer: observer,
       );
 
       expect(repository.getScriptletRules('example.com'), [rule]);

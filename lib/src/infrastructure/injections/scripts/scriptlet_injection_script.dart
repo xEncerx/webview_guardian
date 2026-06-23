@@ -11,13 +11,21 @@ class ScriptletInjectionScript implements InjectionScript {
 
   @override
   String? buildScript(String hostname, FilterRepository repo) {
-    final rules = repo.getScriptletRules(hostname);
+    return buildScriptFromRules(repo.getScriptletRules(hostname))?.source;
+  }
+
+  /// Builds a scriptlet user script from already selected rules.
+  ({String source, List<ScriptletRule> injectedRules})? buildScriptFromRules(
+    List<ScriptletRule> rules,
+  ) {
     final scriptlets = <String>[];
+    final injectedRules = <ScriptletRule>[];
 
     for (final rule in rules) {
       final scriptletBody = ScriptletLibrary.instance.buildScript(rule.scriptletName, rule.args);
       if (scriptletBody != null && scriptletBody.isNotEmpty) {
         scriptlets.add(scriptletBody);
+        injectedRules.add(rule);
       }
     }
 
@@ -30,6 +38,6 @@ class ScriptletInjectionScript implements InjectionScript {
     scriptlets.forEach(buffer.writeln);
 
     buffer.writeln('})();');
-    return buffer.toString();
+    return (source: buffer.toString(), injectedRules: injectedRules);
   }
 }

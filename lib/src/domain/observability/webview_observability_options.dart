@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:webview_guardian/src/domain/observability/webview_event.dart';
 
-/// Controls which high-volume repository observability events are emitted.
+/// Controls which high-volume observability events are emitted.
 @immutable
 class WebViewObservabilityOptions {
   /// Creates [WebViewObservabilityOptions] instance.
@@ -20,9 +20,9 @@ class WebViewObservabilityOptions {
   /// Disabled by default.
   final bool emitAllowedRequests;
 
-  /// Whether to emit [CosmeticCssInjected] events.
+  /// Whether to emit [CosmeticCssInjected] events when cosmetic CSS user scripts are built.
   final bool emitCosmeticInjections;
 
-  /// Whether to emit [ScriptletInjected] events.
+  /// Whether to emit [ScriptletInjected] events when scriptlet user scripts are built.
   final bool emitScriptletInjections;
 }

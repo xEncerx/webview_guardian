@@ -61,11 +61,6 @@ class FilterRepositoryImpl implements FilterRepository {
             !exceptionSelectors.contains(rule.selector) &&
             seen.add(rule.selector)) {
           result.add(rule);
-          if (_observabilityOptions.emitCosmeticInjections) {
-            _observer?.onEvent(
-              CosmeticCssInjected(hostname: hostname, selector: rule.selector),
-            );
-          }
         }
       });
     }
@@ -83,11 +78,6 @@ class FilterRepositoryImpl implements FilterRepository {
       engine.scriptletRules[domain]?.forEach((rule) {
         if (seen.add(rule.scriptletName)) {
           result.add(rule);
-          if (_observabilityOptions.emitScriptletInjections) {
-            _observer?.onEvent(
-              ScriptletInjected(hostname: hostname, scriptletName: rule.scriptletName),
-            );
-          }
         }
       });
     }

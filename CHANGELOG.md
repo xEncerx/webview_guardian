@@ -31,6 +31,7 @@
 - Restrict domain-anchor matching to the URL authority and scope interceptor source hosts per WebView controller.
 - Retry initial host injection until scripts are installed.
 - Preserve the empty compiled-engine trie invariant.
+- Emit injection observability from script orchestration.
 
 ### Performance
 

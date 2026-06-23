@@ -112,9 +112,10 @@ class AdblockService {
   ///   network calls, use [StreamWebViewObserver] which safely delegates work
   ///   to background listeners without blocking the ad-blocking engine.
   ///
-  /// - **[observabilityOptions]**: Controls which repository-level events are
-  ///   emitted to [observer]. [RequestAllowed] is disabled by default because it
-  ///   can be very high volume during request interception.
+  /// - **[observabilityOptions]**: Controls which events are emitted to [observer].
+  ///   [RequestAllowed] is disabled by default because it can be very high volume
+  ///   during request interception. Cosmetic and scriptlet injection events are
+  ///   emitted when the corresponding user scripts are built for a page host.
   ///
   /// - **[storagePath]**: Optional custom directory path for storing downloaded
   ///   filter lists and compiled engine caches. If not provided, defaults to
@@ -196,7 +197,11 @@ class AdblockService {
         observer: _observer,
         observabilityOptions: _observabilityOptions,
       );
-      _orchestrator = InjectionOrchestrator(_repository!);
+      _orchestrator = InjectionOrchestrator(
+        _repository!,
+        observer: _observer,
+        observabilityOptions: _observabilityOptions,
+      );
       _trafficInterceptor = TrafficInterceptorFactory.create(_repository!);
     } else {
       unawaited(_trafficInterceptor?.onEngineUpdated());

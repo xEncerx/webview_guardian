@@ -201,6 +201,51 @@ const val2 = '{{2}}';
       expect(scriptletScript.contentWorld, ContentWorld.DEFAULT_CLIENT);
     });
 
+    test('emits injection events for built user scripts without duplicating cosmetic rules', () {
+      final observer = _RecordingObserver();
+      orchestrator = InjectionOrchestrator(mockRepo, observer: observer);
+      when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
+        const CosmeticHideRule(selector: '.banner'),
+      ]);
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
+        const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
+      ]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      expect(userScripts.length, 3);
+      final cosmeticEvents = observer.events.whereType<CosmeticCssInjected>();
+      expect(cosmeticEvents, hasLength(1));
+      expect(cosmeticEvents.single.selector, '.banner');
+      final scriptletEvents = observer.events.whereType<ScriptletInjected>();
+      expect(scriptletEvents, hasLength(1));
+      expect(scriptletEvents.single.scriptletName, 'fake-scriptlet.js');
+    });
+
+    test('respects disabled injection event options when user scripts are built', () {
+      final observer = _RecordingObserver();
+      orchestrator = InjectionOrchestrator(
+        mockRepo,
+        observer: observer,
+        observabilityOptions: const WebViewObservabilityOptions(
+          emitCosmeticInjections: false,
+          emitScriptletInjections: false,
+        ),
+      );
+      when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
+        const CosmeticHideRule(selector: '.banner'),
+      ]);
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
+        const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
+      ]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      expect(userScripts.length, 3);
+      expect(observer.events.whereType<CosmeticCssInjected>(), isEmpty);
+      expect(observer.events.whereType<ScriptletInjected>(), isEmpty);
+    });
+
     test('should return empty list if no rules are generated', () {
       when(() => mockRepo.getCosmeticRules('clean-site.com')).thenReturn([]);
       when(() => mockRepo.getScriptletRules('clean-site.com')).thenReturn([]);
@@ -209,4 +254,15 @@ const val2 = '{{2}}';
       expect(userScripts, isEmpty);
     });
   });
+}
+
+final class _RecordingObserver implements WebViewObserver {
+  final events = <WebViewEvent>[];
+  final errors = <WebViewError>[];
+
+  @override
+  void onEvent(WebViewEvent event) => events.add(event);
+
+  @override
+  void onError(WebViewError error) => errors.add(error);
 }
