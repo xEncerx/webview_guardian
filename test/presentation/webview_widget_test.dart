@@ -248,6 +248,37 @@ void main() {
       expect(webViewParams.shouldInterceptRequest, isNull);
     });
 
+    testWidgets('removes adblock callbacks when service is removed on rebuild', (tester) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: 'https://example.com',
+            adblockService: service,
+          ),
+        ),
+      );
+
+      var webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      expect(webView.platform.params.shouldInterceptRequest, isNotNull);
+      expect(webView.platform.params.shouldOverrideUrlLoading, isNotNull);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: WebView(initialUrl: 'https://example.com'),
+        ),
+      );
+
+      webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+
+      expect(webViewParams.initialSettings?.useShouldInterceptRequest, isFalse);
+      expect(webViewParams.initialSettings?.useShouldOverrideUrlLoading, isFalse);
+      expect(webViewParams.shouldInterceptRequest, isNull);
+      expect(webViewParams.shouldOverrideUrlLoading, isNull);
+    });
+
     testWidgets('updates host scripts before allowing a main-frame navigation', (
       tester,
     ) async {

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -77,27 +76,35 @@ class WebView extends StatefulWidget {
 }
 
 class _WebViewState extends State<WebView> {
-  late final InAppWebViewSettings _settings;
+  late InAppWebViewSettings _settings;
   late final InAppWebViewController _controller;
+  InAppWebViewAdblockAdapter? _adblockAdapter;
   PullToRefreshController? _pullToRefreshController;
 
   late final WebUri _initialUri;
-  String? _initialHost;
-  List<UserScript>? _initialScripts;
-  String? _initialPreloadedHost;
-  String? _lastInjectedHost;
 
   @override
   void initState() {
     super.initState();
-    _settings = _buildSettings();
 
     _initialUri = WebUri(widget.initialUrl);
-    try {
-      _initialHost = _initialUri.host;
-    } on Exception catch (_) {
-      _initialHost = null;
+    _configureAdblockAdapter();
+  }
+
+  @override
+  void didUpdateWidget(covariant WebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.adblockService != widget.adblockService) {
+      _adblockAdapter?.dispose();
+      _configureAdblockAdapter();
     }
+  }
+
+  @override
+  void dispose() {
+    _adblockAdapter?.dispose();
+    super.dispose();
   }
 
   @override
@@ -140,20 +147,17 @@ class _WebViewState extends State<WebView> {
       initialUrlRequest: URLRequest(url: _initialUri),
       initialSettings: _settings,
       pullToRefreshController: _pullToRefreshController,
-      initialUserScripts: UnmodifiableListView(_getInitialScripts()),
+      initialUserScripts: UnmodifiableListView(_adblockAdapter?.initialUserScripts ?? const []),
       gestureRecognizers: widget.gestureRecognizers,
       onWebViewCreated: (controller) {
         _controller = controller;
         widget.onWebViewCreated?.call(WebViewController(controller));
       },
-      shouldInterceptRequest: widget.adblockService == null ? null : _shouldInterceptRequest,
-      shouldOverrideUrlLoading: widget.adblockService == null ? null : _shouldOverrideUrlLoading,
+      shouldInterceptRequest: _adblockAdapter?.shouldInterceptRequest,
+      shouldOverrideUrlLoading: _adblockAdapter?.shouldOverrideUrlLoading,
       onLoadStart: (controller, url) async {
         widget.onLoadStart?.call(url);
-
-        if (url != null) {
-          await _applyInjections(controller, url.host);
-        }
+        await _adblockAdapter?.onLoadStart(controller, url);
       },
       onLoadStop: (_, url) async {
         widget.onLoadStop?.call(url);
@@ -169,94 +173,28 @@ class _WebViewState extends State<WebView> {
     );
   }
 
-  InAppWebViewSettings _buildSettings() {
-    final hasAdblock = widget.adblockService != null;
-
+  InAppWebViewSettings _buildBaseSettings() {
     return InAppWebViewSettings(
       isInspectable: kDebugMode,
       mediaPlaybackRequiresUserGesture: false,
-      transparentBackground: hasAdblock ? true : null,
-      useShouldInterceptRequest: hasAdblock,
-      useShouldOverrideUrlLoading: hasAdblock,
-      mixedContentMode: hasAdblock ? MixedContentMode.MIXED_CONTENT_NEVER_ALLOW : null,
-      thirdPartyCookiesEnabled: hasAdblock ? false : null,
-      allowsLinkPreview: hasAdblock ? false : null,
-      resourceCustomSchemes: hasAdblock ? ['adblock'] : null,
+      useShouldInterceptRequest: false,
+      useShouldOverrideUrlLoading: false,
+      thirdPartyCookiesEnabled: null,
+      transparentBackground: null,
+      allowsLinkPreview: null,
+      resourceCustomSchemes: null,
     );
   }
 
-  FutureOr<WebResourceResponse?> _shouldInterceptRequest(
-    InAppWebViewController controller,
-    WebResourceRequest request,
-  ) {
+  void _configureAdblockAdapter() {
     final service = widget.adblockService;
-    if (service == null || !service.isEnabled || !service.isReady.value) {
-      return null;
-    }
-    if (service.ruleCount == 0) return null;
-
-    final intercept = service.trafficInterceptor?.shouldInterceptRequest;
-    if (intercept == null) return null;
-
-    return intercept(controller, request);
-  }
-
-  Future<NavigationActionPolicy> _shouldOverrideUrlLoading(
-    InAppWebViewController controller,
-    NavigationAction navigationAction,
-  ) async {
-    if (navigationAction.isForMainFrame) {
-      final url = navigationAction.request.url;
-      if (url != null) {
-        await _applyInjections(controller, url.host);
-      }
-    }
-
-    return NavigationActionPolicy.ALLOW;
-  }
-
-  List<UserScript> _getScriptsForHost(String? hostname) {
-    if (hostname == null) return [];
-
-    if (!_canBuildInjections) return [];
-
-    return widget.adblockService!.orchestrator!.buildUserScripts(hostname);
-  }
-
-  bool get _canBuildInjections {
-    final service = widget.adblockService;
-    if (service == null || !service.isEnabled || !service.isReady.value) return false;
-    if (service.ruleCount == 0) return false;
-
-    return service.orchestrator != null;
-  }
-
-  List<UserScript> _getInitialScripts() {
-    return _initialScripts ??= _buildInitialScripts();
-  }
-
-  List<UserScript> _buildInitialScripts() {
-    final scripts = _getScriptsForHost(_initialHost);
-    if (scripts.isNotEmpty) {
-      _initialPreloadedHost = _initialHost;
-    }
-    return scripts;
-  }
-
-  Future<void> _applyInjections(InAppWebViewController controller, String hostname) async {
-    if (_lastInjectedHost == hostname) return;
-    if (_initialPreloadedHost == hostname) {
-      _initialPreloadedHost = null;
-      return;
-    }
-    if (!_canBuildInjections) return;
-
-    final scripts = _getScriptsForHost(hostname);
-
-    await controller.removeAllUserScripts();
-    for (final script in scripts) {
-      await controller.addUserScript(userScript: script);
-    }
-    _lastInjectedHost = hostname;
+    _adblockAdapter = service == null
+        ? null
+        : InAppWebViewAdblockAdapter(
+            adblockService: service,
+            baseSettings: _buildBaseSettings(),
+            initialUrl: Uri.tryParse(widget.initialUrl),
+          );
+    _settings = _adblockAdapter?.initialSettings ?? _buildBaseSettings();
   }
 }
