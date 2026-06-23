@@ -8,6 +8,9 @@ abstract class FilterRepository {
   /// Retrieves cosmetic hide rules applicable to the specified hostname.
   List<CosmeticHideRule> getCosmeticRules(String hostname);
 
+  /// Retrieves cosmetic hide rules split by domain-specific and generic source buckets.
+  CosmeticRuleSet getCosmeticRuleSet(String hostname);
+
   /// Retrieves scriptlet injection rules applicable to the specified hostname.
   List<ScriptletRule> getScriptletRules(String hostname);
 }

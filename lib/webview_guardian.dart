@@ -4,6 +4,7 @@ export 'src/domain/domain.dart'
     show
         CacheRestoreFailed,
         CosmeticCssInjected,
+        CosmeticFilteringOptions,
         EngineBuildFailed,
         EngineCompiled,
         EngineInitFailed,
@@ -13,6 +14,7 @@ export 'src/domain/domain.dart'
         FilterFetchFailed,
         FilterListFetchStarted,
         FilterSubscription,
+        GenericCosmeticRuleMode,
         IsolateCrashError,
         RequestAllowed,
         RequestBlocked,

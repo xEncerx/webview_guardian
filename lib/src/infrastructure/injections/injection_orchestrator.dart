@@ -9,12 +9,15 @@ class InjectionOrchestrator {
     this._repository, {
     WebViewObserver? observer,
     WebViewObservabilityOptions observabilityOptions = const WebViewObservabilityOptions(),
+    CosmeticFilteringOptions cosmeticFilteringOptions = const CosmeticFilteringOptions(),
   }) : _observer = observer,
-       _observabilityOptions = observabilityOptions;
+       _observabilityOptions = observabilityOptions,
+       _cosmeticFilteringOptions = cosmeticFilteringOptions;
 
   final FilterRepository _repository;
   final WebViewObserver? _observer;
   final WebViewObservabilityOptions _observabilityOptions;
+  final CosmeticFilteringOptions _cosmeticFilteringOptions;
   final CosmeticCSSScript _cosmeticCssScript = CosmeticCSSScript();
   final MutationObserverScript _mutationObserverScript = MutationObserverScript();
   final ScriptletInjectionScript _scriptletInjectionScript = ScriptletInjectionScript();
@@ -23,9 +26,11 @@ class InjectionOrchestrator {
   List<UserScript> buildUserScripts(String hostname) {
     final userScripts = <UserScript>[];
 
-    final cosmeticRules = _repository.getCosmeticRules(hostname);
-    final cssSource = _cosmeticCssScript.buildScriptFromRules(cosmeticRules);
-    final observerSource = _mutationObserverScript.buildScriptFromRules(cosmeticRules);
+    final cosmeticRuleSet = _repository.getCosmeticRuleSet(hostname);
+    final cssRules = _cssRulesFor(cosmeticRuleSet);
+    final observerRules = _observerRulesFor(cosmeticRuleSet);
+    final cssSource = _cosmeticCssScript.buildScriptFromRules(cssRules);
+    final observerSource = _mutationObserverScript.buildScriptFromRules(observerRules);
     var cosmeticScriptBuilt = false;
 
     if (cssSource != null && cssSource.isNotEmpty) {
@@ -38,7 +43,9 @@ class InjectionOrchestrator {
     }
 
     if (cosmeticScriptBuilt && _observabilityOptions.emitCosmeticInjections) {
-      for (final rule in cosmeticRules) {
+      final seenSelectors = <String>{};
+      for (final rule in [...cssRules, ...observerRules]) {
+        if (!seenSelectors.add(rule.selector)) continue;
         _observer?.onEvent(CosmeticCssInjected(hostname: hostname, selector: rule.selector));
       }
     }
@@ -58,6 +65,25 @@ class InjectionOrchestrator {
     }
 
     return userScripts;
+  }
+
+  List<CosmeticHideRule> _cssRulesFor(CosmeticRuleSet ruleSet) {
+    return switch (_cosmeticFilteringOptions.genericRuleMode) {
+      GenericCosmeticRuleMode.off => ruleSet.domainSpecificRules,
+      GenericCosmeticRuleMode.performance => [
+        ...ruleSet.domainSpecificRules,
+        ...ruleSet.genericRules.take(_cosmeticFilteringOptions.genericCssRuleLimit),
+      ],
+      GenericCosmeticRuleMode.full => ruleSet.allRules,
+    };
+  }
+
+  List<CosmeticHideRule> _observerRulesFor(CosmeticRuleSet ruleSet) {
+    return switch (_cosmeticFilteringOptions.genericRuleMode) {
+      GenericCosmeticRuleMode.full => ruleSet.allRules,
+      GenericCosmeticRuleMode.off ||
+      GenericCosmeticRuleMode.performance => ruleSet.domainSpecificRules,
+    };
   }
 
   UserScript _buildUserScript(InjectionScript script, String source) {

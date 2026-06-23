@@ -36,6 +36,7 @@ class AdblockService {
   InjectionOrchestrator? _orchestrator;
   WebViewObserver? _observer;
   WebViewObservabilityOptions _observabilityOptions = const WebViewObservabilityOptions();
+  CosmeticFilteringOptions _cosmeticFilteringOptions = const CosmeticFilteringOptions();
   TrafficInterceptor? _trafficInterceptor;
 
   final List<FilterSubscription> _subscriptions = [];
@@ -125,6 +126,7 @@ class AdblockService {
     FilterHttpOptions httpOptions = const FilterHttpOptions(),
     WebViewObserver? observer,
     WebViewObservabilityOptions observabilityOptions = const WebViewObservabilityOptions(),
+    CosmeticFilteringOptions cosmeticFilteringOptions = const CosmeticFilteringOptions(),
     String? storagePath,
   }) {
     _ensureNotDisposed();
@@ -137,6 +139,7 @@ class AdblockService {
       httpOptions: httpOptions,
       observer: observer,
       observabilityOptions: observabilityOptions,
+      cosmeticFilteringOptions: cosmeticFilteringOptions,
       storagePath: storagePath,
     );
   }
@@ -146,6 +149,7 @@ class AdblockService {
     required FilterHttpOptions httpOptions,
     required WebViewObserver? observer,
     required WebViewObservabilityOptions observabilityOptions,
+    required CosmeticFilteringOptions cosmeticFilteringOptions,
     required String? storagePath,
   }) async {
     PlatformInAppWebViewController.debugLoggingSettings.enabled = false;
@@ -157,6 +161,7 @@ class AdblockService {
       _httpOptions = httpOptions;
       _observer = observer;
       _observabilityOptions = observabilityOptions;
+      _cosmeticFilteringOptions = cosmeticFilteringOptions;
 
       _storagePath = storagePath ?? (await getApplicationSupportDirectory()).path;
       if (_isDisposed) return;
@@ -201,6 +206,7 @@ class AdblockService {
         _repository!,
         observer: _observer,
         observabilityOptions: _observabilityOptions,
+        cosmeticFilteringOptions: _cosmeticFilteringOptions,
       );
       _trafficInterceptor = TrafficInterceptorFactory.create(_repository!);
     } else {

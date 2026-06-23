@@ -200,6 +200,31 @@ void main() {
       expect(repository.getCosmeticRules('example.com'), isEmpty);
       expect(repository.getCosmeticRules('sub.example.com'), [hideRule]);
     });
+
+    test('splits generic and domain-specific rules after applying exceptions', () {
+      const genericRule = CosmeticHideRule(selector: '.global-ad');
+      const excludedGenericRule = CosmeticHideRule(selector: '.global-excepted');
+      const domainRule = CosmeticHideRule(selector: '.domain-ad', includeDomains: ['example.com']);
+      const domainException = CosmeticExceptionRule(
+        selector: '.domain-ad',
+        includeDomains: ['example.com'],
+      );
+      final repository = repositoryFor(
+        hideRules: const {
+          '*': [genericRule, excludedGenericRule],
+          'example.com': [domainRule],
+        },
+        exceptionRules: const {
+          '*': [CosmeticExceptionRule(selector: '.global-excepted')],
+          'example.com': [domainException],
+        },
+      );
+
+      final ruleSet = repository.getCosmeticRuleSet('example.com');
+
+      expect(ruleSet.genericRules, [genericRule]);
+      expect(ruleSet.domainSpecificRules, isEmpty);
+    });
   });
 }
 

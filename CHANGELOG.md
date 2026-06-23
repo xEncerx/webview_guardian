@@ -8,6 +8,7 @@
 ### Added
 
 - Add `WebViewObservabilityOptions` to configure emitted observer events, including blocked requests, allowed requests, cosmetic injections, and scriptlet injections.
+- Add `CosmeticFilteringOptions` to control generic cosmetic rule handling for CSS injection performance.
 - Add a reusable `InAppWebViewAdblockAdapter` for the WebView adblock integration layer.
 - Add tests for adblock service jobs, filter storage, parser behavior, engine serialization, isolate manager behavior, repository observability, traffic interception, and WebView integration.
 
@@ -37,6 +38,7 @@
 
 - Reduce compiled-engine builder buffer allocations with growable binary buffers.
 - Avoid duplicate token extraction during dispatch compilation.
+- Limit generic cosmetic CSS rules in the default performance mode and keep generic rules out of MutationObserver scripts unless full mode is enabled.
 
 ### Migration guide from 0.1.x
 

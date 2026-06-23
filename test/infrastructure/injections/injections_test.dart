@@ -176,10 +176,95 @@ const val2 = '{{2}}';
       ScriptletLibrary.instance.parseForTest('/// fake-scriptlet.js\nconsole.log();');
     });
 
+    test('default mode caps generic CSS rules and keeps all domain-specific rules', () {
+      final genericRules = List.generate(
+        CosmeticFilteringOptions.defaultGenericCssRuleLimit + 1,
+        (index) => CosmeticHideRule(selector: '.generic-$index'),
+      );
+      const domainRule = CosmeticHideRule(selector: '.domain-ad');
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        CosmeticRuleSet(domainSpecificRules: const [domainRule], genericRules: genericRules),
+      );
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      final cssSource = userScripts.singleWhere((script) {
+        return script.injectionTime == UserScriptInjectionTime.AT_DOCUMENT_START;
+      }).source;
+      expect(cssSource, contains('.domain-ad { display: none !important; }'));
+      expect(cssSource, contains('.generic-0 { display: none !important; }'));
+      expect(cssSource, contains('.generic-2999 { display: none !important; }'));
+      expect(cssSource, isNot(contains('.generic-3000 { display: none !important; }')));
+    });
+
+    test('default mode excludes generic rules from MutationObserver', () {
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(
+          domainSpecificRules: [CosmeticHideRule(selector: '.domain-ad')],
+          genericRules: [CosmeticHideRule(selector: 'a[href^="http://olivka.biz/"]')],
+        ),
+      );
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      final observerSource = userScripts.singleWhere((script) {
+        return script.injectionTime == UserScriptInjectionTime.AT_DOCUMENT_END;
+      }).source;
+      expect(observerSource, contains('.domain-ad'));
+      expect(observerSource, isNot(contains('olivka.biz')));
+    });
+
+    test('full mode includes all generic rules in CSS and MutationObserver', () {
+      orchestrator = InjectionOrchestrator(
+        mockRepo,
+        cosmeticFilteringOptions: const CosmeticFilteringOptions(
+          genericRuleMode: GenericCosmeticRuleMode.full,
+        ),
+      );
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(
+          domainSpecificRules: [CosmeticHideRule(selector: '.domain-ad')],
+          genericRules: [CosmeticHideRule(selector: '.generic-ad')],
+        ),
+      );
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      final sources = userScripts.map((script) => script.source).join('\n');
+      expect(sources, contains('.domain-ad'));
+      expect(sources, contains('.generic-ad { display: none !important; }'));
+      expect(sources, contains('const rawSelectors = [".domain-ad",".generic-ad"];'));
+    });
+
+    test('off mode excludes generic rules and keeps domain-specific rules', () {
+      orchestrator = InjectionOrchestrator(
+        mockRepo,
+        cosmeticFilteringOptions: const CosmeticFilteringOptions(
+          genericRuleMode: GenericCosmeticRuleMode.off,
+        ),
+      );
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(
+          domainSpecificRules: [CosmeticHideRule(selector: '.domain-ad')],
+          genericRules: [CosmeticHideRule(selector: '.generic-ad')],
+        ),
+      );
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([]);
+
+      final userScripts = orchestrator.buildUserScripts('example.com');
+
+      final sources = userScripts.map((script) => script.source).join('\n');
+      expect(sources, contains('.domain-ad'));
+      expect(sources, isNot(contains('.generic-ad')));
+    });
+
     test('should build user scripts for valid rules', () {
-      when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
-        const CosmeticHideRule(selector: '.banner'),
-      ]);
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
+      );
       when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
         const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
       ]);
@@ -204,9 +289,9 @@ const val2 = '{{2}}';
     test('emits injection events for built user scripts without duplicating cosmetic rules', () {
       final observer = _RecordingObserver();
       orchestrator = InjectionOrchestrator(mockRepo, observer: observer);
-      when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
-        const CosmeticHideRule(selector: '.banner'),
-      ]);
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
+      );
       when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
         const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
       ]);
@@ -232,9 +317,9 @@ const val2 = '{{2}}';
           emitScriptletInjections: false,
         ),
       );
-      when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
-        const CosmeticHideRule(selector: '.banner'),
-      ]);
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
+      );
       when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
         const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
       ]);
@@ -247,7 +332,9 @@ const val2 = '{{2}}';
     });
 
     test('should return empty list if no rules are generated', () {
-      when(() => mockRepo.getCosmeticRules('clean-site.com')).thenReturn([]);
+      when(() => mockRepo.getCosmeticRuleSet('clean-site.com')).thenReturn(
+        const CosmeticRuleSet(),
+      );
       when(() => mockRepo.getScriptletRules('clean-site.com')).thenReturn([]);
 
       final userScripts = orchestrator.buildUserScripts('clean-site.com');

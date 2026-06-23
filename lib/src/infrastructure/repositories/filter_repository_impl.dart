@@ -39,13 +39,19 @@ class FilterRepositoryImpl implements FilterRepository {
 
   @override
   List<CosmeticHideRule> getCosmeticRules(String hostname) {
+    return getCosmeticRuleSet(hostname).allRules;
+  }
+
+  @override
+  CosmeticRuleSet getCosmeticRuleSet(String hostname) {
     final engine = _engineRef.current;
     final domainChain = _getDomainChain(hostname).toList(growable: false);
 
     // Single pass: collect exception selectors and hide rules simultaneously
     final exceptionSelectors = <String>{};
     final seen = <String>{};
-    final result = <CosmeticHideRule>[];
+    final domainSpecificRules = <CosmeticHideRule>[];
+    final genericRules = <CosmeticHideRule>[];
 
     for (final domain in domainChain) {
       engine.cosmeticExceptionRules[domain]?.forEach((ex) {
@@ -60,12 +66,19 @@ class FilterRepositoryImpl implements FilterRepository {
         if (!_isCosmeticRuleExcluded(hostname, rule.excludeDomains) &&
             !exceptionSelectors.contains(rule.selector) &&
             seen.add(rule.selector)) {
-          result.add(rule);
+          if (_isGenericCosmeticBucket(domain)) {
+            genericRules.add(rule);
+          } else {
+            domainSpecificRules.add(rule);
+          }
         }
       });
     }
 
-    return result;
+    return CosmeticRuleSet(
+      domainSpecificRules: domainSpecificRules,
+      genericRules: genericRules,
+    );
   }
 
   @override
@@ -114,4 +127,6 @@ class FilterRepositoryImpl implements FilterRepository {
     }
     return false;
   }
+
+  bool _isGenericCosmeticBucket(String domain) => domain == '*' || domain.isEmpty;
 }
