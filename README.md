@@ -208,6 +208,32 @@ await adblockService.updateSubscriptions([
 
 `updateSubscriptions()` returns `Future<void>`. Await it before reading state that depends on the updated filters.
 
+## Configure Cosmetic Filtering
+
+Cosmetic filters hide page elements with CSS and small helper scripts. By default, `webview_guardian` uses a performance-first mode for generic cosmetic rules so large filter lists do not inject every global `##selector` rule into every page.
+
+```dart
+await adblockService.init(
+  subscriptions: const [
+    FilterSubscription(url: 'https://easylist.to/easylist/easylist.txt'),
+  ],
+  cosmeticFilteringOptions: const CosmeticFilteringOptions(
+    genericRuleMode: GenericCosmeticRuleMode.performance,
+    genericCssRuleLimit: 3000,
+  ),
+);
+```
+
+Domain-specific cosmetic rules such as `example.com##.ad` are always applied. Generic rules such as `##.ad` or `##a[href^="https://ads.example/"]` are controlled by `genericRuleMode`:
+
+| Mode          | Behavior                                                                 |
+| ------------- | ------------------------------------------------------------------------ |
+| `performance` | Default. Applies domain-specific rules and a capped set of generic CSS rules. Generic rules are not used by the MutationObserver script. |
+| `full`        | Applies all generic rules to CSS and MutationObserver scripts. Use this for maximum filter-list compatibility when the target devices can handle the extra work. |
+| `off`         | Disables generic cosmetic rules. Domain-specific cosmetic rules still apply. |
+
+`genericCssRuleLimit` only affects generic rules in `performance` mode. It does not limit domain-specific rules.
+
 ## Manage Adblock State
 
 Useful `AdblockService` members:
