@@ -6,6 +6,10 @@ class FilterMatcher {
   /// Creates a [FilterMatcher] instance.
   const FilterMatcher(this._engineRef);
 
+  static final Expando<List<List<FilterRule>>> _fallbackRulesByWeight = Expando(
+    'FilterMatcher.fallbackRulesByWeight',
+  );
+
   /// Engine containing compiled trie, tokens, and fallback rules.
   final FilterEngineRef _engineRef;
 
@@ -103,13 +107,16 @@ class FilterMatcher {
     if (highestWeight == 4) return const Allow();
 
     // 3. Fallback Rules (All rules not in Trie or Tokens)
-    for (final rule in engine.fallbackRules) {
-      if (rule.matchesRequest(request)) {
-        final w = rule.ruleWeight;
-        if (w > highestWeight) {
+    final fallbackRulesByWeight = _fallbackBucketsFor(engine);
+    for (var weight = 4; weight > highestWeight; weight--) {
+      final rulesBucket = fallbackRulesByWeight[weight];
+      for (var r = 0; r < rulesBucket.length; r++) {
+        final rule = rulesBucket[r];
+        if (rule.matchesRequest(request)) {
           bestMatch = rule;
-          highestWeight = w;
+          highestWeight = weight;
           if (highestWeight == 4) return const Allow();
+          break;
         }
       }
     }
@@ -121,5 +128,23 @@ class FilterMatcher {
 
     // Allow the request if no valid rules matched or an exception matched
     return const Allow();
+  }
+
+  static List<List<FilterRule>> _fallbackBucketsFor(CompiledFilterEngine engine) {
+    final cached = _fallbackRulesByWeight[engine];
+    if (cached != null) return cached;
+
+    final mutableBuckets = List<List<FilterRule>>.generate(5, (_) => <FilterRule>[]);
+    for (final rule in engine.fallbackRules) {
+      final weight = rule.ruleWeight;
+      if (weight > 0 && weight < mutableBuckets.length) {
+        mutableBuckets[weight].add(rule);
+      }
+    }
+
+    final buckets = List<List<FilterRule>>.unmodifiable(
+      mutableBuckets.map(List<FilterRule>.unmodifiable),
+    );
+    return _fallbackRulesByWeight[engine] = buckets;
   }
 }

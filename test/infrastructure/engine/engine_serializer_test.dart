@@ -666,6 +666,42 @@ void main() {
       expect(identical(dispatchRuleRef, fallbackRuleRef), isTrue);
     });
 
+    test('deserialized fallback candidates preserve precedence pruning behavior', () {
+      final trieCompiler = HostnameTrieCompiler()
+        ..tryAddRule(const NetworkBlockRule(pattern: '||ads.com^'));
+      final trie = trieCompiler.build();
+      final engine = CompiledFilterEngine(
+        totalRules: 3,
+        trieBuffer: trie.buffer,
+        trieRules: trie.rules,
+        tokenDispatchTable: {},
+        fallbackRules: {
+          const NetworkBlockRule(pattern: '/[/'),
+          const NetworkExceptionRule(pattern: 'script.js', isImportant: true),
+        },
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final restored = serializer.deserialize(serializer.serialize(engine));
+      final matcher = FilterMatcher(FilterEngineRef(restored));
+
+      expect(
+        () => matcher.matchNetworkRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        returnsNormally,
+      );
+      expect(
+        matcher.matchNetworkRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        isA<Allow>(),
+      );
+    });
+
     test('trieBuffer deserialization returns a view into original bytes (zero-copy)', () {
       final engine = CompiledFilterEngine(
         totalRules: 0,
