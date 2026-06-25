@@ -1,3 +1,10 @@
+## 0.2.1
+
+### Fixed
+
+- Preserve 40-bit token dispatch keys during engine serialization.
+- Prune fallback matching by rule precedence.
+
 ## 0.2.0
 
 ### Breaking changes
