@@ -452,6 +452,30 @@ void main() {
       },
     );
 
+    test('preserves real 40-bit token dispatch keys after round trip', () {
+      final key = 'banner'.extractTokensAsInt().first;
+      const rule = NetworkBlockRule(pattern: 'banner');
+      final engine = CompiledFilterEngine(
+        totalRules: 1,
+        trieBuffer: Uint32List(0),
+        trieRules: [],
+        tokenDispatchTable: {
+          key: [rule],
+        },
+        fallbackRules: {},
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final deserialized = serializer.deserialize(serializer.serialize(engine));
+
+      expect(key, greaterThan(0xFFFFFFFF));
+      expect(deserialized.tokenDispatchTable, contains(key));
+      expect(deserialized.tokenDispatchTable[key]!.single, isA<NetworkBlockRule>());
+    });
+
     test('serializes and deserializes engine with fallbackRules accurately', () {
       const rule = NetworkBlockRule(pattern: 'fallback');
       final engine = CompiledFilterEngine(

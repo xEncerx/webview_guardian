@@ -151,6 +151,18 @@ void main() {
       expect(result, isA<Block>());
     });
 
+    test('Dispatch: Token-only rule still matches after serialization round trip', () {
+      final engine = buildEngine(
+        tokenRules: [const NetworkBlockRule(pattern: 'banner.js')],
+      );
+      final restored = EngineSerializer().deserialize(EngineSerializer().serialize(engine));
+      final matcher = FilterMatcher(FilterEngineRef(restored));
+
+      final result = matcher.matchNetworkRequest(req('https://site.test/banner.js'));
+
+      expect(result, isA<Block>());
+    });
+
     test('Fallback: Regular expression match', () {
       final engine = buildEngine(
         fallbackRules: [const NetworkBlockRule(pattern: r'/ad[0-9]+\.js/')],

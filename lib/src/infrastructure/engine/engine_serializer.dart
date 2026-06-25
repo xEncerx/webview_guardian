@@ -52,7 +52,7 @@ class EngineSerializer {
 
     writer.writeInt32(engine.tokenDispatchTable.length);
     for (final entry in engine.tokenDispatchTable.entries) {
-      writer.writeInt32(entry.key);
+      writer.writeInt64(entry.key);
       _writeRuleIndexList(writer, entry.value, ruleToIndex);
     }
 
@@ -122,7 +122,7 @@ class EngineSerializer {
       final tokenDispatchTableLength = reader.readInt32();
       final tokenDispatchTable = <int, List<FilterRule>>{};
       for (var i = 0; i < tokenDispatchTableLength; i++) {
-        final key = reader.readInt32();
+        final key = reader.readInt64();
         final rules = readRuleIndexList<FilterRule>();
         tokenDispatchTable[key] = rules;
       }

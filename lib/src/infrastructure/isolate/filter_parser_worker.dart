@@ -13,7 +13,7 @@ import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
-const _engineCacheFormatVersion = 2;
+const _engineCacheFormatVersion = 3;
 const _filterParserVersion = 1;
 typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
 
