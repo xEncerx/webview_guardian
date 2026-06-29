@@ -16,13 +16,14 @@ class _FakeInjectionOrchestrator extends InjectionOrchestrator {
   _FakeInjectionOrchestrator() : super(_MockFilterRepository());
 
   final requestedHosts = <String>[];
+  String scriptMarker = 'initial';
 
   @override
   List<UserScript> buildUserScripts(String hostname) {
     requestedHosts.add(hostname);
     return [
       UserScript(
-        source: 'document.documentElement.dataset.injectedHost = "$hostname";',
+        source: 'document.documentElement.dataset.injectedHost = "$hostname:$scriptMarker";',
         injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
       ),
     ];
@@ -63,6 +64,7 @@ class _FakeAdblockService extends AdblockService {
   final int rules;
   final _FakeInjectionOrchestrator? fakeOrchestrator;
   final _FakeTrafficInterceptor? fakeTrafficInterceptor;
+  final StreamController<int> _ruleCounts = StreamController<int>.broadcast();
   bool enabled = true;
 
   @override
@@ -80,14 +82,20 @@ class _FakeAdblockService extends AdblockService {
   int get ruleCount => rules;
 
   @override
+  Stream<int> get ruleCountStream => _ruleCounts.stream;
+
+  @override
   InjectionOrchestrator? get orchestrator => fakeOrchestrator;
 
   @override
   TrafficInterceptor? get trafficInterceptor => fakeTrafficInterceptor;
 
+  void emitRuleCount(int count) => _ruleCounts.add(count);
+
   @override
   void dispose() {
     ready.dispose();
+    unawaited(_ruleCounts.close());
   }
 }
 
@@ -257,6 +265,36 @@ void main() {
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
       expect(captured.single.source, contains('other.example'));
+    });
+
+    test('reinstalls same-host scripts after engine updates', () async {
+      final adapter = InAppWebViewAdblockAdapter(adblockService: service);
+
+      await adapter.onLoadStart(controller, WebUri('https://example.com'));
+
+      verify(() => controller.removeAllUserScripts()).called(1);
+      var captured = verify(
+        () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
+      ).captured.cast<UserScript>();
+      expect(captured.single.source, contains('example.com:initial'));
+
+      reset(controller);
+      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {});
+      when(
+        () => controller.addUserScript(userScript: any(named: 'userScript')),
+      ).thenAnswer((_) async {});
+
+      orchestrator.scriptMarker = 'updated';
+      service.emitRuleCount(2);
+      await Future<void>.delayed(Duration.zero);
+
+      await adapter.onLoadStart(controller, WebUri('https://example.com'));
+
+      verify(() => controller.removeAllUserScripts()).called(1);
+      captured = verify(
+        () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
+      ).captured.cast<UserScript>();
+      expect(captured.single.source, contains('example.com:updated'));
     });
 
     test('bypasses request interception when service is disabled', () {

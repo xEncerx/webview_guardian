@@ -15,7 +15,12 @@ final class InAppWebViewAdblockAdapter {
     Uri? initialUrl,
   }) : _adblockService = adblockService,
        _initialHost = initialUrl?.host,
-       initialSettings = _buildSettings(baseSettings);
+       initialSettings = _buildSettings(baseSettings) {
+    _ruleCountSubscription = _adblockService.ruleCountStream.listen((_) {
+      _lastInjectedHost = null;
+      _initialPreloadedHost = null;
+    });
+  }
 
   final AdblockService _adblockService;
   final String? _initialHost;
@@ -23,6 +28,7 @@ final class InAppWebViewAdblockAdapter {
   List<UserScript>? _initialScripts;
   String? _initialPreloadedHost;
   String? _lastInjectedHost;
+  late final StreamSubscription<int> _ruleCountSubscription;
 
   /// Settings that should be passed to `InAppWebView.initialSettings`.
   final InAppWebViewSettings initialSettings;
@@ -138,6 +144,7 @@ final class InAppWebViewAdblockAdapter {
 
   /// Releases adapter-owned state.
   void dispose() {
+    unawaited(_ruleCountSubscription.cancel());
     _initialScripts = null;
     _initialPreloadedHost = null;
     _lastInjectedHost = null;
