@@ -57,7 +57,12 @@ class FilterStorage {
     if (!file.existsSync()) return null;
     if (!metadataFile.existsSync()) return null;
 
-    final metadata = jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+    final Map<String, dynamic> metadata;
+    try {
+      metadata = jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+    } on Object {
+      return null;
+    }
     if (metadata['cacheIdentity'] != cacheIdentity) return null;
 
     final bytes = await file.readAsBytes();

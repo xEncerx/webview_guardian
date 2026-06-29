@@ -32,6 +32,17 @@ void main() {
       expect(loaded, isNull);
     });
 
+    test('does not load engine bytes when metadata is corrupted', () async {
+      await storage.saveEngineBytes(Uint8List.fromList([1, 2, 3]), cacheIdentity: 'identity-a');
+
+      final metadataFile = File('${tempDir.path}/adblocker/compiled_filter_engine.json');
+      await metadataFile.writeAsString('{not-json', flush: true);
+
+      final loaded = await storage.loadEngineBytes(cacheIdentity: 'identity-a');
+
+      expect(loaded, isNull);
+    });
+
     test('loads filter list metadata without payload bytes', () async {
       final bytes = Uint8List.fromList([1, 2, 3, 4]);
       await storage.saveFilterList(
