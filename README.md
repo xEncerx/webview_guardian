@@ -1,11 +1,24 @@
 [![Powered by flutter_inappwebview](https://img.shields.io/badge/Powered%20by-flutter__inappwebview-blue.svg)](https://github.com/pichillilorenzo/flutter_inappwebview)
 [![style: very good analysis](https://img.shields.io/badge/style-very_good_analysis-B22C89.svg)](https://pub.dev/packages/very_good_analysis)
+[![Tests](https://github.com/xEncerx/webview_guardian/actions/workflows/tests.yml/badge.svg)](https://github.com/xEncerx/webview_guardian/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/xEncerx/webview_guardian/graph/badge.svg)](https://codecov.io/gh/xEncerx/webview_guardian)
 
 # webview_guardian
 
 `webview_guardian` is a Flutter WebView wrapper with optional ad blocking. You can use it as a regular WebView, or pass an `AdblockService` to block network requests and apply cosmetic filters.
 
 The package is built on top of [`flutter_inappwebview`](https://github.com/pichillilorenzo/flutter_inappwebview).
+
+## Features
+
+- **Network Request Interception**: blocks requests that match the loaded filter rules, such as ad, tracker, or malware domains depending on your filter lists;
+- **Cosmetic Filters (CSS/JS Injection)**: hides page elements with CSS rules and injects supported scriptlets for rules that cannot be handled by request blocking alone;
+- **Multiple Filter Formats**: supports Hosts files, plain domain lists, and a practical subset of Adblock Plus/uBlock Origin-style rules;
+- **Filter Subscriptions**: loads remote filter lists and supports replacing subscriptions at runtime;
+- **Configurable Filter Downloads**: customize filter-list request timeouts, headers, User-Agent, and proxy settings;
+- **Ready-To-Use WebView**: use the built-in `WebView` widget when you want the package to wire the integration for you;
+- **InAppWebView Adapter**: use `InAppWebViewAdblockAdapter` when you already have a custom `InAppWebView` setup and only need the adblock integration layer;
+- **Runtime Controls And Events**: enable or disable blocking, read rule counts, clear cache, and observe blocked requests, engine events, and injection events.
 
 ## Supported Platforms
 
