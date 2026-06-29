@@ -13,7 +13,11 @@ class MutationObserverScript implements InjectionScript {
 
   @override
   String? buildScript(String hostname, FilterRepository repo) {
-    final rules = repo.getCosmeticRules(hostname);
+    return buildScriptFromRules(repo.getCosmeticRules(hostname));
+  }
+
+  /// Builds a mutation observer user script from already selected rules.
+  String? buildScriptFromRules(List<CosmeticHideRule> rules) {
     if (rules.isEmpty) return null;
 
     final selectors = rules.map((r) => r.selector).toList();

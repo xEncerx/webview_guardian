@@ -1,8 +1,22 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
+
+Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
+
+NetworkRequest _request(String url, {required String sourceUrl}) {
+  final uri = Uri.parse(url);
+  return NetworkRequest(
+    url: uri.toString(),
+    host: uri.host,
+    sourceHost: Uri.parse(sourceUrl).host,
+    resourceType: ResourceType.script,
+  );
+}
 
 // Extension to help test individual rules easily.
 extension EngineSerializerTestExt on EngineSerializer {
@@ -171,6 +185,7 @@ void main() {
         resourceTypes: {ResourceType.script, ResourceType.image},
         isThirdPartyOnly: true,
         isImportant: true,
+        isMatchCase: true,
         includeDomains: {'a.com', 'b.com'},
         excludeDomains: {'c.com'},
       );
@@ -181,8 +196,48 @@ void main() {
       expect(deserialized.resourceTypes, rule.resourceTypes);
       expect(deserialized.isThirdPartyOnly, isTrue);
       expect(deserialized.isImportant, isTrue);
+      expect(deserialized.isMatchCase, isTrue);
       expect(deserialized.includeDomains, rule.includeDomains);
       expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
+
+    test('NetworkBlockRule preserves first-party-only matching after round trip', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'||ads.com^$1p')).single;
+
+      final deserialized = serializer.testRuleRoundTrip(rule);
+
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://ads.com'),
+        ),
+        isTrue,
+      );
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+        ),
+        isFalse,
+      );
+    });
+
+    test('NetworkExceptionRule preserves first-party-only matching after round trip', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'@@||ads.com^$first-party')).single;
+
+      final deserialized = serializer.testRuleRoundTrip(rule);
+
+      expect(deserialized, isA<NetworkExceptionRule>());
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://ads.com'),
+        ),
+        isTrue,
+      );
+      expect(
+        deserialized.matchesRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+        ),
+        isFalse,
+      );
     });
 
     test(
@@ -198,6 +253,7 @@ void main() {
         expect(deserialized.resourceTypes, isEmpty);
         expect(deserialized.isThirdPartyOnly, isFalse);
         expect(deserialized.isImportant, isFalse);
+        expect(deserialized.isMatchCase, isFalse);
         expect(deserialized.includeDomains, isNull);
         expect(deserialized.excludeDomains, isNull);
       },
@@ -208,6 +264,7 @@ void main() {
         pattern: 'exception.com',
         resourceTypes: {ResourceType.document},
         isImportant: true,
+        isMatchCase: true,
       );
 
       final deserialized = serializer.testRuleRoundTrip(rule) as NetworkExceptionRule;
@@ -216,6 +273,7 @@ void main() {
       expect(deserialized.resourceTypes, {ResourceType.document});
       expect(deserialized.isThirdPartyOnly, isFalse);
       expect(deserialized.isImportant, isTrue);
+      expect(deserialized.isMatchCase, isTrue);
     });
 
     test('CosmeticHideRule serialized and deserialized accurately with null or empty domains', () {
@@ -232,6 +290,21 @@ void main() {
       expect(deserialized2.domains, isEmpty);
     });
 
+    test('CosmeticHideRule preserves include and exclude domains after round trip', () {
+      const rule = CosmeticHideRule(
+        selector: '.ad-banner',
+        includeDomains: ['example.com'],
+        excludeDomains: ['sub.example.com'],
+      );
+
+      final deserialized = serializer.testRuleRoundTrip(rule) as CosmeticHideRule;
+
+      expect(deserialized.selector, rule.selector);
+      expect(deserialized.domains, ['example.com']);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
+
     test('CosmeticExceptionRule serialized and deserialized accurately', () {
       const rule = CosmeticExceptionRule(selector: '.safe-banner', domains: ['safe.com']);
 
@@ -239,6 +312,21 @@ void main() {
 
       expect(deserialized.selector, rule.selector);
       expect(deserialized.domains, rule.domains);
+    });
+
+    test('CosmeticExceptionRule preserves include and exclude domains after round trip', () {
+      const rule = CosmeticExceptionRule(
+        selector: '.safe-banner',
+        includeDomains: ['example.com'],
+        excludeDomains: ['sub.example.com'],
+      );
+
+      final deserialized = serializer.testRuleRoundTrip(rule) as CosmeticExceptionRule;
+
+      expect(deserialized.selector, rule.selector);
+      expect(deserialized.domains, ['example.com']);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
     });
 
     test(
@@ -363,6 +451,30 @@ void main() {
         expect(deserialized.tokenDispatchTable[999]!.length, 500);
       },
     );
+
+    test('preserves real 40-bit token dispatch keys after round trip', () {
+      final key = 'banner'.extractTokensAsInt().first;
+      const rule = NetworkBlockRule(pattern: 'banner');
+      final engine = CompiledFilterEngine(
+        totalRules: 1,
+        trieBuffer: Uint32List(0),
+        trieRules: [],
+        tokenDispatchTable: {
+          key: [rule],
+        },
+        fallbackRules: {},
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final deserialized = serializer.deserialize(serializer.serialize(engine));
+
+      expect(key, greaterThan(0xFFFFFFFF));
+      expect(deserialized.tokenDispatchTable, contains(key));
+      expect(deserialized.tokenDispatchTable[key]!.single, isA<NetworkBlockRule>());
+    });
 
     test('serializes and deserializes engine with fallbackRules accurately', () {
       const rule = NetworkBlockRule(pattern: 'fallback');
@@ -496,6 +608,36 @@ void main() {
       expect(bytesWithShared.length, lessThan(bytesWithDuplicates.length));
     });
 
+    test('rule pool keeps first-party-only rule distinct from unconstrained rule', () {
+      final rules = AdblockPlusParser()
+          .parse(_bytes('||ads.com^\n||ads.com^\$first-party'))
+          .cast<NetworkBlockRule>()
+          .toList();
+      final engine = CompiledFilterEngine(
+        totalRules: rules.length,
+        trieBuffer: Uint32List(0),
+        trieRules: rules,
+        tokenDispatchTable: {},
+        fallbackRules: {},
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final restored = serializer.deserialize(serializer.serialize(engine));
+
+      expect(restored.trieRules, hasLength(2));
+      expect(
+        restored.trieRules.where(
+          (rule) => rule.matchesRequest(
+            _request('https://ads.com/script.js', sourceUrl: 'https://example.com'),
+          ),
+        ),
+        hasLength(1),
+      );
+    });
+
     test('maintains identical object references via rule pool deduplication across sections', () {
       const sharedRule = NetworkBlockRule(pattern: 'shared');
 
@@ -522,6 +664,42 @@ void main() {
 
       expect(identical(trieRuleRef, dispatchRuleRef), isTrue);
       expect(identical(dispatchRuleRef, fallbackRuleRef), isTrue);
+    });
+
+    test('deserialized fallback candidates preserve precedence pruning behavior', () {
+      final trieCompiler = HostnameTrieCompiler()
+        ..tryAddRule(const NetworkBlockRule(pattern: '||ads.com^'));
+      final trie = trieCompiler.build();
+      final engine = CompiledFilterEngine(
+        totalRules: 3,
+        trieBuffer: trie.buffer,
+        trieRules: trie.rules,
+        tokenDispatchTable: {},
+        fallbackRules: {
+          const NetworkBlockRule(pattern: '/[/'),
+          const NetworkExceptionRule(pattern: 'script.js', isImportant: true),
+        },
+        cosmeticHideRules: {},
+        cosmeticExceptionRules: {},
+        scriptletRules: {},
+        cssInjectRules: {},
+      );
+
+      final restored = serializer.deserialize(serializer.serialize(engine));
+      final matcher = FilterMatcher(FilterEngineRef(restored));
+
+      expect(
+        () => matcher.matchNetworkRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        returnsNormally,
+      );
+      expect(
+        matcher.matchNetworkRequest(
+          _request('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        isA<Allow>(),
+      );
     });
 
     test('trieBuffer deserialization returns a view into original bytes (zero-copy)', () {

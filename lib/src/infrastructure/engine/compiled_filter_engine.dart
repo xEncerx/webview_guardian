@@ -10,18 +10,18 @@ class CompiledFilterEngine {
     required this.trieBuffer,
     required this.trieRules,
     required this.tokenDispatchTable,
-    required this.fallbackRules,
+    required Set<FilterRule> fallbackRules,
     required this.cosmeticHideRules,
     required this.cosmeticExceptionRules,
     required this.scriptletRules,
     required this.cssInjectRules,
-  });
+  }) : fallbackRules = Set.unmodifiable(fallbackRules);
 
   /// Creates an empty [CompiledFilterEngine] instance.
   factory CompiledFilterEngine.empty() {
     return CompiledFilterEngine(
       totalRules: 0,
-      trieBuffer: Uint32List(0),
+      trieBuffer: Uint32List(1),
       trieRules: const [],
       tokenDispatchTable: const {},
       fallbackRules: const {},

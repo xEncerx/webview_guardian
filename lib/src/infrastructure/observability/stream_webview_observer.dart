@@ -10,7 +10,7 @@ class StreamWebViewObserver implements WebViewObserver {
   ///
   /// - [delegates] is the list of observers that will receive events and errors emitted by this observer.
   ///
-  /// **The AdblockService manages the lifecycle of the [StreamWebViewObserver], calling dispose() when cleaning up.**
+  /// The caller owns this observer and should call [dispose] when it is no longer needed.
   StreamWebViewObserver({required List<WebViewObserver> delegates}) : _delegates = delegates {
     for (final delegate in _delegates) {
       _eventController.stream.listen(delegate.onEvent);
@@ -23,16 +23,28 @@ class StreamWebViewObserver implements WebViewObserver {
   final _errorController = StreamController<WebViewError>.broadcast();
 
   /// Stream of WebView events emitted by the ad-blocker.
+  ///
+  /// The stream is closed when [dispose] is called. Events received after disposal are
+  /// ignored.
   Stream<WebViewEvent> get events => _eventController.stream;
 
   /// Stream of WebView errors emitted by the ad-blocker.
+  ///
+  /// The stream is closed when [dispose] is called. Errors received after disposal are
+  /// ignored.
   Stream<WebViewError> get errors => _errorController.stream;
 
   @override
-  void onEvent(WebViewEvent event) => _eventController.add(event);
+  void onEvent(WebViewEvent event) {
+    if (_eventController.isClosed) return;
+    _eventController.add(event);
+  }
 
   @override
-  void onError(WebViewError error) => _errorController.add(error);
+  void onError(WebViewError error) {
+    if (_errorController.isClosed) return;
+    _errorController.add(error);
+  }
 
   /// Disposes the observer and its resources.
   void dispose() {

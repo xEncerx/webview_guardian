@@ -97,6 +97,74 @@ example.com##.banner-ad
       expect(engines, hasLength(2));
     });
 
+    test('dispose should complete the active build job with cancellation error', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final job = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      manager.dispose();
+
+      await expectLater(
+        job.timeout(const Duration(seconds: 5)),
+        throwsA(isA<FilterIsolateJobCancelled>()),
+      );
+    });
+
+    test('dispose should complete the active clear cache job with cancellation error', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final job = manager.runClearCacheJob(
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      manager.dispose();
+
+      await expectLater(
+        job.timeout(const Duration(seconds: 5)),
+        throwsA(isA<FilterIsolateJobCancelled>()),
+      );
+    });
+
+    test('concurrent runBuildJob rejection should be a failed future', () async {
+      final manager = FilterIsolateManager(
+        onEngineReady: (_, _, _, _) {},
+        onWorkerEvent: (_) {},
+        onWorkerError: (_) {},
+      );
+
+      final activeJob = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+      final rejectedJob = manager.runBuildJob(
+        subscriptions: [FilterSubscription(url: testFilterFile.path)],
+        httpOptions: const FilterHttpOptions(),
+        storagePath: tempDir.path,
+        useTestClient: true,
+      );
+
+      await expectLater(rejectedJob, throwsA(isA<StateError>()));
+
+      manager.dispose();
+      await expectLater(activeJob, throwsA(isA<FilterIsolateJobCancelled>()));
+    });
+
     test('runBuildJob should complete after terminal cache restore failure', () async {
       final errors = <WebViewError>[];
       final invalidStoragePath = File('${tempDir.path}/not_a_directory')..writeAsStringSync('x');
@@ -173,6 +241,236 @@ example.com##.banner-ad
       expect(result2.$3, equals(originalRuleCount));
       manager2.dispose();
     });
+
+    test(
+      'should restore cached engine when subscription source is unavailable but cache exists',
+      () async {
+        final completer1 = Completer<(CompiledFilterEngine, bool, int)>();
+        final manager1 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer1.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: (_) {},
+        );
+
+        await manager1.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager1.sendSubscriptions(
+          subscriptions: [FilterSubscription(url: testFilterFile.path)],
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result1 = await completer1.future.timeout(const Duration(seconds: 5));
+        expect(result1.$2, isFalse);
+        manager1.dispose();
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await testFilterFile.delete();
+
+        final completer2 = Completer<(CompiledFilterEngine, bool, int)>();
+        final errors = <WebViewError>[];
+        final manager2 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer2.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: errors.add,
+        );
+
+        await manager2.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager2.sendSubscriptions(
+          subscriptions: [FilterSubscription(url: testFilterFile.path)],
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result2 = await completer2.future.timeout(const Duration(seconds: 5));
+        expect(errors.whereType<FilterFetchFailed>(), isNotEmpty);
+        expect(result2.$2, isTrue);
+        expect(result2.$3, result1.$3);
+
+        manager2.dispose();
+      },
+    );
+
+    test('should fetch filters with GET when HEAD fails', () async {
+      final requests = <String>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        requests.add(request.method);
+        request.response.persistentConnection = false;
+        if (request.method == 'HEAD') {
+          request.response.statusCode = HttpStatus.methodNotAllowed;
+          await request.response.close();
+          return;
+        }
+
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.set(HttpHeaders.etagHeader, 'get-etag')
+          ..write('''
+[Adblock Plus 2.0]
+||head-fallback.example^
+''');
+        await request.response.close();
+      });
+
+      final completer = Completer<(CompiledFilterEngine, bool, int)>();
+      final errors = <WebViewError>[];
+      final manager = FilterIsolateManager(
+        onEngineReady: (engine, fromCache, totalRules, _) =>
+            completer.complete((engine, fromCache, totalRules)),
+        onWorkerEvent: (_) {},
+        onWorkerError: errors.add,
+      );
+
+      try {
+        await manager.runBuildJob(
+          subscriptions: [
+            FilterSubscription(url: 'http://${server.address.address}:${server.port}/filters.txt'),
+          ],
+          httpOptions: const FilterHttpOptions(
+            connectTimeout: Duration(seconds: 1),
+            receiveTimeout: Duration(seconds: 1),
+          ),
+          storagePath: tempDir.path,
+        );
+        final result = await completer.future;
+
+        expect(requests, containsAllInOrder(['HEAD', 'GET']));
+        expect(errors.whereType<FilterFetchFailed>(), isEmpty);
+        expect(result.$2, isFalse);
+        expect(result.$3, greaterThan(0));
+      } finally {
+        manager.dispose();
+        await server.close(force: true);
+      }
+    });
+
+    test(
+      'should not restore cached engine for a changed subscription set after fetch failure',
+      () async {
+        final completer1 = Completer<(CompiledFilterEngine, bool, int)>();
+        final manager1 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer1.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: (_) {},
+        );
+
+        await manager1.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager1.sendSubscriptions(
+          subscriptions: [FilterSubscription(url: testFilterFile.path)],
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result1 = await completer1.future.timeout(const Duration(seconds: 5));
+        expect(result1.$2, isFalse, reason: 'Initial run should compile the one-list engine');
+        manager1.dispose();
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        final missingFilterFile = File('${tempDir.path}/missing_filter.txt');
+        final completer2 = Completer<(CompiledFilterEngine, bool, int)>();
+        final errors = <WebViewError>[];
+        final manager2 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer2.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: errors.add,
+        );
+
+        await manager2.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager2.sendSubscriptions(
+          subscriptions: [
+            FilterSubscription(url: testFilterFile.path),
+            FilterSubscription(url: missingFilterFile.path),
+          ],
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result2 = await completer2.future.timeout(const Duration(seconds: 5));
+
+        expect(errors.whereType<FilterFetchFailed>(), isNotEmpty);
+        expect(
+          result2.$2,
+          isFalse,
+          reason: 'A one-list engine cache must not be restored for a two-list subscription set',
+        );
+
+        manager2.dispose();
+      },
+    );
+
+    test(
+      'should not cache and restore a partial engine after repeated subscription fetch failures',
+      () async {
+        final completer1 = Completer<(CompiledFilterEngine, bool, int)>();
+        final manager1 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer1.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: (_) {},
+        );
+
+        await manager1.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager1.sendSubscriptions(
+          subscriptions: [FilterSubscription(url: testFilterFile.path)],
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        await completer1.future.timeout(const Duration(seconds: 5));
+        manager1.dispose();
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        final missingFilterFile = File('${tempDir.path}/missing_filter.txt');
+        final failedSubscriptions = [
+          FilterSubscription(url: testFilterFile.path),
+          FilterSubscription(url: missingFilterFile.path),
+        ];
+
+        final completer2 = Completer<(CompiledFilterEngine, bool, int)>();
+        final manager2 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer2.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: (_) {},
+        );
+
+        await manager2.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager2.sendSubscriptions(
+          subscriptions: failedSubscriptions,
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result2 = await completer2.future.timeout(const Duration(seconds: 5));
+        expect(result2.$2, isFalse, reason: 'First failed update may compile but must not restore');
+        manager2.dispose();
+
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        final completer3 = Completer<(CompiledFilterEngine, bool, int)>();
+        final manager3 = FilterIsolateManager(
+          onEngineReady: (engine, fromCache, totalRules, _) =>
+              completer3.complete((engine, fromCache, totalRules)),
+          onWorkerEvent: (_) {},
+          onWorkerError: (_) {},
+        );
+
+        await manager3.spawn(storagePath: tempDir.path, useTestClient: true);
+        manager3.sendSubscriptions(
+          subscriptions: failedSubscriptions,
+          httpOptions: const FilterHttpOptions(),
+        );
+
+        final result3 = await completer3.future.timeout(const Duration(seconds: 5));
+        expect(
+          result3.$2,
+          isFalse,
+          reason: 'Repeated failures must not restore a cached partial engine',
+        );
+
+        manager3.dispose();
+      },
+    );
 
     test(
       'should ignore concurrent sendSubscriptions calls (isPipelineRunning protection)',

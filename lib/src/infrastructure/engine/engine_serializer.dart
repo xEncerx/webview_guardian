@@ -11,6 +11,12 @@ class EngineSerializer {
   static const int _typeCosmeticException = 4;
   static const int _typeScriptlet = 5;
   static const int _typeCssInject = 6;
+  static const int _typeNetworkBlockMatchCase = 7;
+  static const int _typeNetworkExceptionMatchCase = 8;
+  static const int _typeNetworkBlockFirstParty = 9;
+  static const int _typeNetworkExceptionFirstParty = 10;
+  static const int _typeNetworkBlockFirstPartyMatchCase = 11;
+  static const int _typeNetworkExceptionFirstPartyMatchCase = 12;
 
   /// Serializes the given [CompiledFilterEngine] into a [Uint8List].
   Uint8List serialize(CompiledFilterEngine engine) {
@@ -46,7 +52,7 @@ class EngineSerializer {
 
     writer.writeInt32(engine.tokenDispatchTable.length);
     for (final entry in engine.tokenDispatchTable.entries) {
-      writer.writeInt32(entry.key);
+      writer.writeInt64(entry.key);
       _writeRuleIndexList(writer, entry.value, ruleToIndex);
     }
 
@@ -116,7 +122,7 @@ class EngineSerializer {
       final tokenDispatchTableLength = reader.readInt32();
       final tokenDispatchTable = <int, List<FilterRule>>{};
       for (var i = 0; i < tokenDispatchTableLength; i++) {
-        final key = reader.readInt32();
+        final key = reader.readInt64();
         final rules = readRuleIndexList<FilterRule>();
         tokenDispatchTable[key] = rules;
       }
@@ -188,7 +194,15 @@ class EngineSerializer {
   void _writeRule(BinaryWriter writer, FilterRule rule) {
     switch (rule) {
       case NetworkBlockRule():
-        writer.writeUint8(_typeNetworkBlock);
+        writer.writeUint8(
+          rule.isFirstPartyOnly
+              ? rule.isMatchCase
+                    ? _typeNetworkBlockFirstPartyMatchCase
+                    : _typeNetworkBlockFirstParty
+              : rule.isMatchCase
+              ? _typeNetworkBlockMatchCase
+              : _typeNetworkBlock,
+        );
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
         writer.writeBool(rule.isThirdPartyOnly);
@@ -196,7 +210,15 @@ class EngineSerializer {
         writer.writeNullableStringSet(rule.includeDomains);
         writer.writeNullableStringSet(rule.excludeDomains);
       case NetworkExceptionRule():
-        writer.writeUint8(_typeNetworkException);
+        writer.writeUint8(
+          rule.isFirstPartyOnly
+              ? rule.isMatchCase
+                    ? _typeNetworkExceptionFirstPartyMatchCase
+                    : _typeNetworkExceptionFirstParty
+              : rule.isMatchCase
+              ? _typeNetworkExceptionMatchCase
+              : _typeNetworkException,
+        );
         writer.writeString(rule.pattern);
         writer.writeResourceTypes(rule.resourceTypes);
         writer.writeBool(rule.isThirdPartyOnly);
@@ -206,11 +228,13 @@ class EngineSerializer {
       case CosmeticHideRule():
         writer.writeUint8(_typeCosmeticHide);
         writer.writeString(rule.selector);
-        writer.writeNullableStringList(rule.domains);
+        writer.writeNullableStringList(rule.includeDomains);
+        writer.writeNullableStringList(rule.excludeDomains);
       case CosmeticExceptionRule():
         writer.writeUint8(_typeCosmeticException);
         writer.writeString(rule.selector);
-        writer.writeNullableStringList(rule.domains);
+        writer.writeNullableStringList(rule.includeDomains);
+        writer.writeNullableStringList(rule.excludeDomains);
       case ScriptletRule():
         writer.writeUint8(_typeScriptlet);
         writer.writeString(rule.scriptletName);
@@ -227,32 +251,50 @@ class EngineSerializer {
     final type = reader.readUint8();
     switch (type) {
       case _typeNetworkBlock:
+      case _typeNetworkBlockMatchCase:
+      case _typeNetworkBlockFirstParty:
+      case _typeNetworkBlockFirstPartyMatchCase:
         return NetworkBlockRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
+          isFirstPartyOnly:
+              type == _typeNetworkBlockFirstParty || type == _typeNetworkBlockFirstPartyMatchCase,
           isImportant: reader.readBool(),
+          isMatchCase:
+              type == _typeNetworkBlockMatchCase || type == _typeNetworkBlockFirstPartyMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );
       case _typeNetworkException:
+      case _typeNetworkExceptionMatchCase:
+      case _typeNetworkExceptionFirstParty:
+      case _typeNetworkExceptionFirstPartyMatchCase:
         return NetworkExceptionRule(
           pattern: reader.readString(),
           resourceTypes: reader.readResourceTypes(),
           isThirdPartyOnly: reader.readBool(),
+          isFirstPartyOnly:
+              type == _typeNetworkExceptionFirstParty ||
+              type == _typeNetworkExceptionFirstPartyMatchCase,
           isImportant: reader.readBool(),
+          isMatchCase:
+              type == _typeNetworkExceptionMatchCase ||
+              type == _typeNetworkExceptionFirstPartyMatchCase,
           includeDomains: reader.readNullableStringSet(),
           excludeDomains: reader.readNullableStringSet(),
         );
       case _typeCosmeticHide:
         return CosmeticHideRule(
           selector: reader.readString(),
-          domains: reader.readNullableStringList(),
+          includeDomains: reader.readNullableStringList(),
+          excludeDomains: reader.readNullableStringList(),
         );
       case _typeCosmeticException:
         return CosmeticExceptionRule(
           selector: reader.readString(),
-          domains: reader.readNullableStringList(),
+          includeDomains: reader.readNullableStringList(),
+          excludeDomains: reader.readNullableStringList(),
         );
       case _typeScriptlet:
         return ScriptletRule(

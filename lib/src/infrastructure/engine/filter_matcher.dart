@@ -6,18 +6,25 @@ class FilterMatcher {
   /// Creates a [FilterMatcher] instance.
   const FilterMatcher(this._engineRef);
 
+  static final Expando<List<List<FilterRule>>> _fallbackRulesByWeight = Expando(
+    'FilterMatcher.fallbackRulesByWeight',
+  );
+
   /// Engine containing compiled trie, tokens, and fallback rules.
   final FilterEngineRef _engineRef;
 
   /// Matches a network request against all filter rules to determine the appropriate action.
   FilterDecision matchNetworkRequest(NetworkRequest request) {
+    final engine = _engineRef.current;
+    if (engine.totalRules == 0) return const Allow();
+
     FilterRule? bestMatch;
     var highestWeight = 0;
 
     // 1. Hostname Trie Search (Domain Rules)
     final host = request.host;
-    final buffer = _engineRef.current.trieBuffer;
-    final trieRules = _engineRef.current.trieRules;
+    final buffer = engine.trieBuffer;
+    final trieRules = engine.trieRules;
 
     var offset = 0;
 
@@ -80,7 +87,7 @@ class FilterMatcher {
 
     // 2. Token Dispatch (Search by 5-character patterns inside URL)
     request.url.anyTokenMatches((token) {
-      final rulesBucket = _engineRef.current.tokenDispatchTable[token];
+      final rulesBucket = engine.tokenDispatchTable[token];
       if (rulesBucket != null) {
         for (var r = 0; r < rulesBucket.length; r++) {
           final rule = rulesBucket[r];
@@ -100,13 +107,16 @@ class FilterMatcher {
     if (highestWeight == 4) return const Allow();
 
     // 3. Fallback Rules (All rules not in Trie or Tokens)
-    for (final rule in _engineRef.current.fallbackRules) {
-      if (rule.matchesRequest(request)) {
-        final w = rule.ruleWeight;
-        if (w > highestWeight) {
+    final fallbackRulesByWeight = _fallbackBucketsFor(engine);
+    for (var weight = 4; weight > highestWeight; weight--) {
+      final rulesBucket = fallbackRulesByWeight[weight];
+      for (var r = 0; r < rulesBucket.length; r++) {
+        final rule = rulesBucket[r];
+        if (rule.matchesRequest(request)) {
           bestMatch = rule;
-          highestWeight = w;
+          highestWeight = weight;
           if (highestWeight == 4) return const Allow();
+          break;
         }
       }
     }
@@ -118,5 +128,23 @@ class FilterMatcher {
 
     // Allow the request if no valid rules matched or an exception matched
     return const Allow();
+  }
+
+  static List<List<FilterRule>> _fallbackBucketsFor(CompiledFilterEngine engine) {
+    final cached = _fallbackRulesByWeight[engine];
+    if (cached != null) return cached;
+
+    final mutableBuckets = List<List<FilterRule>>.generate(5, (_) => <FilterRule>[]);
+    for (final rule in engine.fallbackRules) {
+      final weight = rule.ruleWeight;
+      if (weight > 0 && weight < mutableBuckets.length) {
+        mutableBuckets[weight].add(rule);
+      }
+    }
+
+    final buckets = List<List<FilterRule>>.unmodifiable(
+      mutableBuckets.map(List<FilterRule>.unmodifiable),
+    );
+    return _fallbackRulesByWeight[engine] = buckets;
   }
 }

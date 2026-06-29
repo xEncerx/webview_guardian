@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project
-`webview_guardian` is a Flutter package built on top of `flutter_inappwebview`. It provides a WebView wrapper with optional built-in ad blocking.
+`webview_guardian` is a Flutter package built on top of `flutter_inappwebview`. It provides a ready-to-use WebView wrapper and an `InAppWebView` adapter for ad blocking.
 
 Main public entrypoint: `lib/webview_guardian.dart`.
 
@@ -9,9 +9,12 @@ Important public types:
 - `AdblockService`
 - `WebView`
 - `WebViewController`
+- `InAppWebViewAdblockAdapter`
 - `StreamWebViewObserver`
+- `WebViewObservabilityOptions`
 - `FilterSubscription`
 - `FilterHttpOptions`
+- `CosmeticFilteringOptions`
 
 ## Architecture
 Source code is split into:
@@ -21,16 +24,19 @@ Source code is split into:
 - `lib/src/presentation`
 
 General responsibilities:
-- `presentation`: WebView widget/controller API
-- `infrastructure`: adblock service, interceptors, isolate, observability
+- `presentation`: WebView widget/controller API and `InAppWebView` adapter
+- `infrastructure`: adblock service, request interceptors, injections, isolate, observability
 - `domain`: entities, events, repository contracts
 - `data`: parsers, network, persistence helpers
 
 ## Notes
-- Ad blocking is optional; `WebView` can be used without `AdblockService`.
-- Filter parsing and compilation happen in a background isolate.
-- The engine supports request interception and cosmetic CSS/JS injection.
 - Current package/platform focus is Android and Windows.
+- `WebView` wires ad blocking for users; `InAppWebViewAdblockAdapter` is for existing custom `InAppWebView` setups.
+- The blocker handles network request interception plus cosmetic CSS/JS/scriptlet injection.
+- Filter inputs: Hosts files, plain domain lists, and a practical subset of Adblock Plus/uBO-style rules.
+- Heavy ABP features such as regex network rules, procedural cosmetics, and HTML filtering are intentionally unsupported.
+- Filter downloads support custom timeouts, headers/User-Agent, and proxy settings.
+- `updateSubscriptions()` and `clearCache()` are async and must be awaited when callers depend on the updated state.
 
 ## Validation
 - Get dependencies: `flutter pub get`

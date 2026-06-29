@@ -17,6 +17,7 @@ void main() {
   group('Traffic Interceptors', () {
     late MockFilterRepository repository;
     late MockInAppWebViewController controller;
+    late MockInAppWebViewController otherController;
     late MockWebResourceRequest request;
 
     setUpAll(() {
@@ -33,6 +34,7 @@ void main() {
     setUp(() {
       repository = MockFilterRepository();
       controller = MockInAppWebViewController();
+      otherController = MockInAppWebViewController();
       request = MockWebResourceRequest();
 
       when(() => request.url).thenReturn(WebUri('https://ads.example.com/script.js'));
@@ -89,6 +91,24 @@ void main() {
         expect((capturedSub.last as NetworkRequest).sourceHost, 'example.com');
       });
 
+      test('should track main frame URI per controller', () {
+        when(() => repository.lookupNetworkRequest(any())).thenReturn(const Allow());
+
+        when(() => request.isForMainFrame).thenReturn(true);
+        when(() => request.url).thenReturn(WebUri('https://first.example.com'));
+        adapter.shouldInterceptRequest!(controller, request);
+
+        when(() => request.url).thenReturn(WebUri('https://second.example.com'));
+        adapter.shouldInterceptRequest!(otherController, request);
+
+        when(() => request.isForMainFrame).thenReturn(false);
+        when(() => request.url).thenReturn(WebUri('https://cdn.example.com/script.js'));
+        adapter.shouldInterceptRequest!(controller, request);
+
+        final captured = verify(() => repository.lookupNetworkRequest(captureAny())).captured;
+        expect((captured.last as NetworkRequest).sourceHost, 'first.example.com');
+      });
+
       test('onEngineUpdated does not throw', () async {
         expect(() => adapter.onEngineUpdated(), returnsNormally);
       });
@@ -119,6 +139,24 @@ void main() {
         final response = intercept(controller, request) as WebResourceResponse?;
 
         expect(response, isNull);
+      });
+
+      test('should track main frame URI per controller', () {
+        when(() => repository.lookupNetworkRequest(any())).thenReturn(const Allow());
+
+        when(() => request.isForMainFrame).thenReturn(true);
+        when(() => request.url).thenReturn(WebUri('https://first.example.com'));
+        adapter.shouldInterceptRequest!(controller, request);
+
+        when(() => request.url).thenReturn(WebUri('https://second.example.com'));
+        adapter.shouldInterceptRequest!(otherController, request);
+
+        when(() => request.isForMainFrame).thenReturn(false);
+        when(() => request.url).thenReturn(WebUri('https://cdn.example.com/script.js'));
+        adapter.shouldInterceptRequest!(controller, request);
+
+        final captured = verify(() => repository.lookupNetworkRequest(captureAny())).captured;
+        expect((captured.last as NetworkRequest).sourceHost, 'first.example.com');
       });
     });
 

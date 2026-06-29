@@ -259,6 +259,26 @@ void main() {
       expect(rule, isA<NetworkExceptionRule>());
       expect((rule as NetworkExceptionRule).pattern, '||good.com^');
     });
+
+    test(r'should preserve $match-case on block and exception network rules', () {
+      final bytes = _bytes(
+        r'||example.com/AdBanner.js$match-case'
+        '\n'
+        r'@@||example.com/AllowedAd.js$match-case',
+      );
+      final rules = parser.parse(bytes).toList();
+
+      expect(rules.length, 2);
+
+      expect(rules[0], isA<NetworkBlockRule>());
+      expect((rules[0] as NetworkBlockRule).pattern, '||example.com/AdBanner.js');
+      expect((rules[0] as NetworkBlockRule).isMatchCase, isTrue);
+
+      expect(rules[1], isA<NetworkExceptionRule>());
+      expect((rules[1] as NetworkExceptionRule).pattern, '||example.com/AllowedAd.js');
+      expect((rules[1] as NetworkExceptionRule).isMatchCase, isTrue);
+    });
+
     test(r'should correctly parse rules with $important modifier', () {
       final bytes = _bytes(
         'mastarti.com/stats/\$important\n'
@@ -325,6 +345,21 @@ void main() {
 
       expect(blockRule.excludeDomains, isNotNull);
       expect(blockRule.excludeDomains, contains('b.com'));
+    });
+
+    test('should parse hash-containing network rules without stealing cosmetic syntax', () {
+      final bytes = _bytes(
+        '||example.com/path#fragment^\nexample.com##.ad\nexample.com##+js(nowebrtc)',
+      );
+      final rules = parser.parse(bytes).toList();
+
+      expect(rules.length, 3);
+      expect(rules[0], isA<NetworkBlockRule>());
+      expect((rules[0] as NetworkBlockRule).pattern, '||example.com/path#fragment^');
+      expect(rules[1], isA<CosmeticHideRule>());
+      expect((rules[1] as CosmeticHideRule).selector, '.ad');
+      expect(rules[2], isA<ScriptletRule>());
+      expect((rules[2] as ScriptletRule).scriptletName, 'nowebrtc');
     });
 
     test('should correctly parse cosmetic hiding rules', () {
@@ -400,9 +435,30 @@ void main() {
         expect(rules, isEmpty);
       });
 
-      test('should drop rules with first-party or ~third-party modifiers', () {
+      test('should parse first-party aliases as active network rules', () {
         final bytes = _bytes(
           '||ads.com^\$first-party\n||tracker.com^\$~third-party\n||analytics.com^\$1p',
+        );
+        final rules = parser.parse(bytes).toList();
+
+        expect(rules.length, 3);
+        expect(rules, everyElement(isA<NetworkBlockRule>()));
+        expect((rules[0] as NetworkBlockRule).pattern, '||ads.com^');
+        expect((rules[1] as NetworkBlockRule).pattern, '||tracker.com^');
+        expect((rules[2] as NetworkBlockRule).pattern, '||analytics.com^');
+      });
+
+      test('should parse first-party exception rules as active network rules', () {
+        final rules = parser.parse(_bytes(r'@@||ads.com^$1p')).toList();
+
+        expect(rules.length, 1);
+        expect(rules.first, isA<NetworkExceptionRule>());
+        expect((rules.first as NetworkExceptionRule).pattern, '||ads.com^');
+      });
+
+      test('should drop rules with contradictory first-party and third-party modifiers', () {
+        final bytes = _bytes(
+          '||ads.com^\$first-party,third-party\n||tracker.com^\$~third-party,3p',
         );
         final rules = parser.parse(bytes).toList();
 
@@ -439,6 +495,16 @@ void main() {
       test('should drop unsupported HTML filtering rules', () {
         final bytes = _bytes(
           'example.com\$\$script[tag-content="alert"]\nexample.com##^script:has-text(ad)\nexample.com\$@\$div.ad',
+        );
+        final rules = parser.parse(bytes).toList();
+
+        expect(rules, isEmpty);
+      });
+
+      test('should drop unsupported cosmetic and scriptlet exception syntaxes', () {
+        final bytes = _bytes(
+          "example.com#@\$#body { background: #000 !important; }\n"
+          "example.com#@%#//scriptlet('abort-on-property-read', 'ads')",
         );
         final rules = parser.parse(bytes).toList();
 
@@ -488,6 +554,17 @@ void main() {
         final rule = rules.first as CosmeticHideRule;
         expect(rule.domains, ['finvtech.com', 'herstage.com', 'sportynew.com']);
         expect(rule.selector, '.ads-wrapper');
+      });
+
+      test('excluded domains are preserved separately from included domains', () {
+        final rules = parser.parse(_bytes('example.com,~sub.example.com##.ad')).toList();
+
+        expect(rules.length, 1);
+        final rule = rules.first as CosmeticHideRule;
+        expect(rule.domains, ['example.com']);
+        expect(rule.includeDomains, ['example.com']);
+        expect(rule.excludeDomains, ['sub.example.com']);
+        expect(rule.selector, '.ad');
       });
 
       test('global rule (no domain) has null domains', () {
@@ -562,6 +639,17 @@ void main() {
         final rule = rules.first as CosmeticExceptionRule;
         expect(rule.domains, ['mafagames.com', 'telkomsel.com']);
         expect(rule.selector, '#adsContainer');
+      });
+
+      test('excluded exception domains are preserved separately from included domains', () {
+        final rules = parser.parse(_bytes('example.com,~sub.example.com#@#.ad')).toList();
+
+        expect(rules.length, 1);
+        final rule = rules.first as CosmeticExceptionRule;
+        expect(rule.domains, ['example.com']);
+        expect(rule.includeDomains, ['example.com']);
+        expect(rule.excludeDomains, ['sub.example.com']);
+        expect(rule.selector, '.ad');
       });
 
       test('exception with attribute selector', () {

@@ -18,6 +18,10 @@ bool _listEquals<T>(List<T>? a, List<T>? b) {
   return true;
 }
 
+int _setHash<T>(Set<T>? set) => set == null ? 0 : Object.hashAllUnordered(set);
+
+int _listHash<T>(List<T>? list) => list == null ? 0 : Object.hashAll(list);
+
 /// Represents a filter rule that can be applied to web content.
 sealed class FilterRule {
   const FilterRule();
@@ -35,15 +39,15 @@ extension RuleWeight on FilterRule {
   }
 }
 
-/// A rule that blocks network requests matching a specific pattern and resource types.
 @immutable
-final class NetworkBlockRule extends FilterRule {
-  /// Creates a [NetworkBlockRule] instance.
-  const NetworkBlockRule({
+sealed class _NetworkRule extends FilterRule {
+  const _NetworkRule({
     required this.pattern,
     this.resourceTypes = const {},
     this.isThirdPartyOnly = false,
+    this.isFirstPartyOnly = false,
     this.isImportant = false,
+    this.isMatchCase = false,
     this.includeDomains,
     this.excludeDomains,
   });
@@ -57,127 +61,142 @@ final class NetworkBlockRule extends FilterRule {
   /// Whether this rule should only apply to third-party requests.
   final bool isThirdPartyOnly;
 
+  /// Whether this rule should only apply to first-party requests.
+  final bool isFirstPartyOnly;
+
   /// Whether this rule is marked as important, which may give it higher precedence over other rules.
   final bool isImportant;
 
-  /// A set of domains for which this rule should be applied, even if they are not third-party.
+  /// Whether URL matching should be case-sensitive.
+  final bool isMatchCase;
+
+  /// A set of source domains where this network rule may apply.
   final Set<String>? includeDomains;
 
-  /// A set of domains for which this rule should not be applied, even if they are third-party.
+  /// A set of source domains where this network rule must not apply.
   final Set<String>? excludeDomains;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is NetworkBlockRule &&
+      (other is _NetworkRule &&
+          other.runtimeType == runtimeType &&
           pattern == other.pattern &&
           isThirdPartyOnly == other.isThirdPartyOnly &&
+          isFirstPartyOnly == other.isFirstPartyOnly &&
           isImportant == other.isImportant &&
+          isMatchCase == other.isMatchCase &&
           _setEquals(resourceTypes, other.resourceTypes) &&
           _setEquals(includeDomains, other.includeDomains) &&
           _setEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => pattern.hashCode ^ isImportant.hashCode;
+  int get hashCode => Object.hash(
+    runtimeType,
+    pattern,
+    _setHash(resourceTypes),
+    isThirdPartyOnly,
+    isFirstPartyOnly,
+    isImportant,
+    isMatchCase,
+    _setHash(includeDomains),
+    _setHash(excludeDomains),
+  );
+}
+
+/// A rule that blocks network requests matching a specific pattern and resource types.
+@immutable
+final class NetworkBlockRule extends _NetworkRule {
+  /// Creates a [NetworkBlockRule] instance.
+  const NetworkBlockRule({
+    required super.pattern,
+    super.resourceTypes,
+    super.isThirdPartyOnly,
+    super.isFirstPartyOnly,
+    super.isImportant,
+    super.isMatchCase,
+    super.includeDomains,
+    super.excludeDomains,
+  });
 }
 
 /// A rule that allows network requests matching a specific pattern and resource types, overriding block rules.
 @immutable
-final class NetworkExceptionRule extends FilterRule {
+final class NetworkExceptionRule extends _NetworkRule {
   /// Creates a [NetworkExceptionRule] instance.
   const NetworkExceptionRule({
-    required this.pattern,
-    this.resourceTypes = const {},
-    this.isThirdPartyOnly = false,
-    this.isImportant = false,
-    this.includeDomains,
-    this.excludeDomains,
+    required super.pattern,
+    super.resourceTypes,
+    super.isThirdPartyOnly,
+    super.isFirstPartyOnly,
+    super.isImportant,
+    super.isMatchCase,
+    super.includeDomains,
+    super.excludeDomains,
   });
+}
 
-  /// The pattern to match against network requests.
-  final String pattern;
+@immutable
+sealed class _CosmeticRule extends FilterRule {
+  const _CosmeticRule({
+    required this.selector,
+    List<String>? domains,
+    List<String>? includeDomains,
+    this.excludeDomains,
+  }) : includeDomains = includeDomains ?? domains;
 
-  /// The types of resources to which this rule applies.
-  final Set<ResourceType> resourceTypes;
+  /// The hostnames where this cosmetic rule may apply. null = global rule.
+  final List<String>? includeDomains;
 
-  /// Whether this rule should only apply to third-party requests.
-  final bool isThirdPartyOnly;
+  /// The hostnames where this cosmetic rule must not apply.
+  final List<String>? excludeDomains;
 
-  /// Whether this rule is marked as important, which may give it higher precedence over other rules.
-  final bool isImportant;
+  /// Alias for [includeDomains], retained for indexing call sites.
+  List<String>? get domains => includeDomains;
 
-  /// A set of domains for which this rule should be applied, even if they are not third-party.
-  final Set<String>? includeDomains;
-
-  /// A set of domains for which this rule should not be applied, even if they are third-party.
-
-  final Set<String>? excludeDomains;
+  /// The CSS selector this cosmetic rule targets.
+  final String selector;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is NetworkExceptionRule &&
-          pattern == other.pattern &&
-          isThirdPartyOnly == other.isThirdPartyOnly &&
-          isImportant == other.isImportant &&
-          _setEquals(resourceTypes, other.resourceTypes) &&
-          _setEquals(includeDomains, other.includeDomains) &&
-          _setEquals(excludeDomains, other.excludeDomains));
+      (other is _CosmeticRule &&
+          other.runtimeType == runtimeType &&
+          selector == other.selector &&
+          _listEquals(includeDomains, other.includeDomains) &&
+          _listEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => pattern.hashCode ^ isImportant.hashCode;
+  int get hashCode => Object.hash(
+    runtimeType,
+    selector,
+    _listHash(includeDomains),
+    _listHash(excludeDomains),
+  );
 }
 
 /// A rule that hides elements on a webpage matching a specific CSS selector.
 @immutable
-final class CosmeticHideRule extends FilterRule {
+final class CosmeticHideRule extends _CosmeticRule {
   /// Creates a [CosmeticHideRule] instance.
   const CosmeticHideRule({
-    required this.selector,
-    this.domains,
+    required super.selector,
+    super.domains,
+    super.includeDomains,
+    super.excludeDomains,
   });
-
-  /// The domains for which this rule should be applied. null = global rule.
-  final List<String>? domains;
-
-  /// The CSS selector to match elements that should be hidden.
-  final String selector;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is CosmeticHideRule &&
-          selector == other.selector &&
-          _listEquals(domains, other.domains));
-
-  @override
-  int get hashCode => selector.hashCode;
 }
 
 /// A rule that prevents hiding elements on a webpage matching a specific CSS selector.
 @immutable
-final class CosmeticExceptionRule extends FilterRule {
+final class CosmeticExceptionRule extends _CosmeticRule {
   /// Creates a [CosmeticExceptionRule] instance.
   const CosmeticExceptionRule({
-    required this.selector,
-    this.domains,
+    required super.selector,
+    super.domains,
+    super.includeDomains,
+    super.excludeDomains,
   });
-
-  /// The domains for which this rule should be applied. null = global rule.
-  final List<String>? domains;
-
-  /// The CSS selector to match elements that should not be hidden.
-  final String selector;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is CosmeticExceptionRule &&
-          selector == other.selector &&
-          _listEquals(domains, other.domains));
-
-  @override
-  int get hashCode => selector.hashCode ^ (domains?.first.hashCode ?? 0);
 }
 
 /// A rule that injects a scriptlet into a webpage.

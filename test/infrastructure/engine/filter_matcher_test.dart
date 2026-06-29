@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:test/test.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
@@ -56,6 +58,49 @@ void main() {
   }
 
   group('Basic Search Algorithms (Isolation Tests)', () {
+    test('Empty engine exposes a valid empty trie root', () {
+      final engine = CompiledFilterEngine.empty();
+
+      expect(engine.trieBuffer, hasLength(1));
+      expect(engine.trieBuffer.single, 0);
+    });
+
+    test('Empty engine allows requests without throwing', () {
+      final matcher = FilterMatcher(FilterEngineRef(CompiledFilterEngine.empty()));
+
+      expect(
+        () => matcher.matchNetworkRequest(req('https://example.com/script.js')),
+        returnsNormally,
+      );
+      expect(
+        matcher.matchNetworkRequest(req('https://example.com/script.js')),
+        isA<Allow>(),
+      );
+    });
+
+    test('Valid empty trie root still evaluates token rules', () {
+      final engine = CompiledFilterEngine(
+        totalRules: 1,
+        trieBuffer: Uint32List.fromList([0]),
+        trieRules: const [],
+        tokenDispatchTable: {
+          'banner'.extractTokensAsInt().first: [
+            const NetworkBlockRule(pattern: 'banner'),
+          ],
+        },
+        fallbackRules: const {},
+        cosmeticHideRules: const {},
+        cosmeticExceptionRules: const {},
+        scriptletRules: const {},
+        cssInjectRules: const {},
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://site.com/ad/banner.png'));
+
+      expect(result, isA<Block>());
+    });
+
     test('Trie: Exact domain match', () {
       final engine = buildEngine(
         trieRules: [const NetworkBlockRule(pattern: '||example.com^')],
@@ -106,6 +151,18 @@ void main() {
       expect(result, isA<Block>());
     });
 
+    test('Dispatch: Token-only rule still matches after serialization round trip', () {
+      final engine = buildEngine(
+        tokenRules: [const NetworkBlockRule(pattern: 'banner.js')],
+      );
+      final restored = EngineSerializer().deserialize(EngineSerializer().serialize(engine));
+      final matcher = FilterMatcher(FilterEngineRef(restored));
+
+      final result = matcher.matchNetworkRequest(req('https://site.test/banner.js'));
+
+      expect(result, isA<Block>());
+    });
+
     test('Fallback: Regular expression match', () {
       final engine = buildEngine(
         fallbackRules: [const NetworkBlockRule(pattern: r'/ad[0-9]+\.js/')],
@@ -114,6 +171,19 @@ void main() {
 
       final result = matcher.matchNetworkRequest(req('http://site.com/ad42.js'));
       expect(result, isA<Block>());
+    });
+
+    test('Fallback rules are immutable after engine construction', () {
+      final engine = buildEngine(
+        fallbackRules: [const NetworkBlockRule(pattern: 'script.js')],
+      );
+
+      expect(
+        () => engine.fallbackRules.add(
+          const NetworkExceptionRule(pattern: 'script.js', isImportant: true),
+        ),
+        throwsUnsupportedError,
+      );
     });
   });
 
@@ -160,6 +230,186 @@ void main() {
 
       final result = matcher.matchNetworkRequest(req('http://example.com/banner/'));
       expect(result, isA<Allow>(), reason: 'Should not early exit on normal Block');
+    });
+
+    test('Trie normal block skips equal-priority fallback normal blocks', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: List<FilterRule>.generate(
+          100,
+          (_) => const NetworkBlockRule(pattern: '/[/'),
+        ),
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        () => matcher.matchNetworkRequest(req('https://ads.com/script.js')),
+        returnsNormally,
+        reason: 'Equal-priority fallback blocks must not be evaluated once a trie block matched.',
+      );
+      expect(matcher.matchNetworkRequest(req('https://ads.com/script.js')), isA<Block>());
+    });
+
+    test('Trie normal block is overridden by fallback normal exception', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [const NetworkExceptionRule(pattern: 'allowed-path')],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://ads.com/allowed-path/script.js'));
+
+      expect(result, isA<Allow>());
+    });
+
+    test('Trie normal block remains blocked when fallback important block outranks exception', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [
+          const NetworkExceptionRule(pattern: 'script.js'),
+          const NetworkBlockRule(pattern: 'script.js', isImportant: true),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://ads.com/script.js'));
+
+      expect(result, isA<Block>());
+    });
+
+    test('Trie normal block is overridden by fallback important exception', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [const NetworkExceptionRule(pattern: 'script.js', isImportant: true)],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://ads.com/script.js'));
+
+      expect(result, isA<Allow>());
+    });
+
+    test('Token normal exception is overridden by fallback important block', () {
+      final engine = buildEngine(
+        tokenRules: [const NetworkExceptionRule(pattern: 'allowed-token')],
+        fallbackRules: [const NetworkBlockRule(pattern: 'allowed-token', isImportant: true)],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      final result = matcher.matchNetworkRequest(req('https://ads.com/allowed-token.js'));
+
+      expect(result, isA<Block>());
+    });
+
+    test('Fallback important block skips lower-priority fallback candidates', () {
+      final engine = buildEngine(
+        fallbackRules: [
+          const NetworkBlockRule(pattern: 'script.js', isImportant: true),
+          const NetworkExceptionRule(pattern: '/[/'),
+          const NetworkBlockRule(pattern: '/[/'),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        () => matcher.matchNetworkRequest(req('https://ads.com/script.js')),
+        returnsNormally,
+        reason: 'Lower fallback classes cannot change an important block decision.',
+      );
+      expect(matcher.matchNetworkRequest(req('https://ads.com/script.js')), isA<Block>());
+    });
+  });
+
+  group('Fallback precedence constraints', () {
+    test('Higher-priority fallback resource type constraint is honored', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [
+          const NetworkExceptionRule(
+            pattern: 'asset',
+            resourceTypes: {ResourceType.image},
+          ),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        matcher.matchNetworkRequest(req('https://ads.com/asset.png', type: ResourceType.image)),
+        isA<Allow>(),
+      );
+      expect(
+        matcher.matchNetworkRequest(req('https://ads.com/asset.js')),
+        isA<Block>(),
+      );
+    });
+
+    test('Higher-priority fallback party constraint is honored', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [
+          const NetworkExceptionRule(pattern: 'script.js', isThirdPartyOnly: true),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        isA<Allow>(),
+      );
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://ads.com'),
+        ),
+        isA<Block>(),
+      );
+    });
+
+    test('Higher-priority fallback include domain constraint is honored', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [
+          const NetworkExceptionRule(pattern: 'script.js', includeDomains: {'publisher.com'}),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        isA<Allow>(),
+      );
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://other.com'),
+        ),
+        isA<Block>(),
+      );
+    });
+
+    test('Higher-priority fallback exclude domain constraint is honored', () {
+      final engine = buildEngine(
+        trieRules: [const NetworkBlockRule(pattern: '||ads.com^')],
+        fallbackRules: [
+          const NetworkExceptionRule(pattern: 'script.js', excludeDomains: {'blocked.com'}),
+        ],
+      );
+      final matcher = FilterMatcher(FilterEngineRef(engine));
+
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://publisher.com'),
+        ),
+        isA<Allow>(),
+      );
+      expect(
+        matcher.matchNetworkRequest(
+          req('https://ads.com/script.js', sourceUrl: 'https://blocked.com'),
+        ),
+        isA<Block>(),
+      );
     });
   });
 

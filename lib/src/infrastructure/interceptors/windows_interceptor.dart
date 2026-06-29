@@ -13,7 +13,7 @@ class WindowsInterceptorAdapter implements TrafficInterceptor {
 
   final FilterRepository _filterRepository;
 
-  Uri _currentMainFrameUri = Uri();
+  final _currentMainFrameUris = Expando<Uri>();
 
   @override
   Future<void> onEngineUpdated() async {
@@ -34,13 +34,15 @@ class WindowsInterceptorAdapter implements TrafficInterceptor {
     final uri = request.url.uriValue;
     final isMainFrame = request.isForMainFrame ?? false;
 
-    if (isMainFrame) _currentMainFrameUri = uri;
+    if (isMainFrame) _currentMainFrameUris[controller] = uri;
+
+    final currentMainFrameUri = _currentMainFrameUris[controller] ?? Uri();
 
     final netRequest = NetworkRequest(
       url: uri.toString(),
       host: uri.host,
       resourceType: request.getResourceType(isMainFrame),
-      sourceHost: _currentMainFrameUri.host,
+      sourceHost: currentMainFrameUri.host,
     );
 
     final decision = _filterRepository.lookupNetworkRequest(netRequest);

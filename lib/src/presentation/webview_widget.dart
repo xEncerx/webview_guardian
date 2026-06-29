@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
@@ -77,36 +76,35 @@ class WebView extends StatefulWidget {
 }
 
 class _WebViewState extends State<WebView> {
-  late final InAppWebViewSettings _settings;
+  late InAppWebViewSettings _settings;
   late final InAppWebViewController _controller;
+  InAppWebViewAdblockAdapter? _adblockAdapter;
   PullToRefreshController? _pullToRefreshController;
 
   late final WebUri _initialUri;
-  String? _lastInjectedHost;
 
   @override
   void initState() {
     super.initState();
-    _settings = InAppWebViewSettings(
-      isInspectable: kDebugMode,
-      mediaPlaybackRequiresUserGesture: false,
-      transparentBackground: true,
-      useShouldInterceptRequest: true,
-      mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
-      thirdPartyCookiesEnabled: false,
-      allowsLinkPreview: false,
-      resourceCustomSchemes: ['adblock'],
-      // // Disable Hybrid Composition on Android to prevent visual glitches
-      // // and "Renderer process crash" when closing the WebView.
-      // useHybridComposition: defaultTargetPlatform != TargetPlatform.android,
-    );
 
     _initialUri = WebUri(widget.initialUrl);
-    try {
-      _lastInjectedHost = _initialUri.host;
-    } on Exception catch (_) {
-      _lastInjectedHost = null;
+    _configureAdblockAdapter();
+  }
+
+  @override
+  void didUpdateWidget(covariant WebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.adblockService != widget.adblockService) {
+      _adblockAdapter?.dispose();
+      _configureAdblockAdapter();
     }
+  }
+
+  @override
+  void dispose() {
+    _adblockAdapter?.dispose();
+    super.dispose();
   }
 
   @override
@@ -149,19 +147,17 @@ class _WebViewState extends State<WebView> {
       initialUrlRequest: URLRequest(url: _initialUri),
       initialSettings: _settings,
       pullToRefreshController: _pullToRefreshController,
-      initialUserScripts: UnmodifiableListView(_getScriptsForHost(_lastInjectedHost)),
+      initialUserScripts: UnmodifiableListView(_adblockAdapter?.initialUserScripts ?? const []),
       gestureRecognizers: widget.gestureRecognizers,
       onWebViewCreated: (controller) {
         _controller = controller;
         widget.onWebViewCreated?.call(WebViewController(controller));
       },
-      shouldInterceptRequest: _shouldInterceptRequest,
+      shouldInterceptRequest: _adblockAdapter?.shouldInterceptRequest,
+      shouldOverrideUrlLoading: _adblockAdapter?.shouldOverrideUrlLoading,
       onLoadStart: (controller, url) async {
         widget.onLoadStart?.call(url);
-
-        if (url != null) {
-          await _applyInjections(controller, url.host);
-        }
+        await _adblockAdapter?.onLoadStart(controller, url);
       },
       onLoadStop: (_, url) async {
         widget.onLoadStop?.call(url);
@@ -177,44 +173,28 @@ class _WebViewState extends State<WebView> {
     );
   }
 
-  FutureOr<WebResourceResponse?> _shouldInterceptRequest(
-    InAppWebViewController controller,
-    WebResourceRequest request,
-  ) {
-    final service = widget.adblockService;
-    if (service == null || !service.isEnabled || !service.isReady.value) {
-      return null;
-    }
-    if (service.ruleCount == 0) return null;
-
-    final intercept = service.trafficInterceptor?.shouldInterceptRequest;
-    if (intercept == null) return null;
-
-    return intercept(controller, request);
+  InAppWebViewSettings _buildBaseSettings() {
+    return InAppWebViewSettings(
+      isInspectable: kDebugMode,
+      mediaPlaybackRequiresUserGesture: false,
+      useShouldInterceptRequest: false,
+      useShouldOverrideUrlLoading: false,
+      thirdPartyCookiesEnabled: null,
+      transparentBackground: null,
+      allowsLinkPreview: null,
+      resourceCustomSchemes: null,
+    );
   }
 
-  List<UserScript> _getScriptsForHost(String? hostname) {
-    if (hostname == null) return [];
-
+  void _configureAdblockAdapter() {
     final service = widget.adblockService;
-    if (service == null || !service.isEnabled || !service.isReady.value) return [];
-    if (service.ruleCount == 0) return [];
-
-    final orchestrator = service.orchestrator;
-    if (orchestrator == null) return [];
-
-    return orchestrator.buildUserScripts(hostname);
-  }
-
-  Future<void> _applyInjections(InAppWebViewController controller, String hostname) async {
-    if (_lastInjectedHost == hostname) return;
-    _lastInjectedHost = hostname;
-
-    final scripts = _getScriptsForHost(hostname);
-
-    await controller.removeAllUserScripts();
-    for (final script in scripts) {
-      await controller.addUserScript(userScript: script);
-    }
+    _adblockAdapter = service == null
+        ? null
+        : InAppWebViewAdblockAdapter(
+            adblockService: service,
+            baseSettings: _buildBaseSettings(),
+            initialUrl: Uri.tryParse(widget.initialUrl),
+          );
+    _settings = _adblockAdapter?.initialSettings ?? _buildBaseSettings();
   }
 }

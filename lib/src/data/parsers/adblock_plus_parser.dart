@@ -55,11 +55,23 @@ class AdblockPlusParser implements FilterListParser {
       return null;
     }
 
-    if (line.contains('#')) {
+    if (_hasCosmeticOrScriptletSyntax(line)) {
       return _parseCosmeticOrScriptlet(line);
     }
 
     return _parseNetworkRule(line);
+  }
+
+  bool _hasCosmeticOrScriptletSyntax(String line) {
+    return line.contains('##+js(') ||
+        line.contains('#%#//scriptlet(') ||
+        line.contains('#@#') ||
+        line.contains('#@?#') ||
+        line.contains(r'#@$#') ||
+        line.contains('#@%#//scriptlet(') ||
+        line.contains(r'#$#') ||
+        line.contains('#?#') ||
+        line.contains('##');
   }
 
   FilterRule? _parseCosmeticOrScriptlet(String line) {
@@ -113,19 +125,36 @@ class AdblockPlusParser implements FilterListParser {
 
     if (selector.isEmpty) return null;
 
-    List<String>? domains;
+    List<String>? includeDomains;
+    List<String>? excludeDomains;
     if (domainsPart.isNotEmpty) {
-      domains = domainsPart
-          .split(',')
-          .map((d) => d.trim())
-          .where((d) => d.isNotEmpty && !d.startsWith('~'))
-          .toList();
-      if (domains.isEmpty) domains = null;
+      final includes = <String>[];
+      final excludes = <String>[];
+      for (final rawDomain in domainsPart.split(',')) {
+        final domain = rawDomain.trim();
+        if (domain.isEmpty) continue;
+        if (domain.startsWith('~')) {
+          final excludedDomain = domain.substring(1).trim();
+          if (excludedDomain.isNotEmpty) excludes.add(excludedDomain);
+        } else {
+          includes.add(domain);
+        }
+      }
+      if (includes.isNotEmpty) includeDomains = includes;
+      if (excludes.isNotEmpty) excludeDomains = excludes;
     }
 
     return isException
-        ? CosmeticExceptionRule(selector: selector, domains: domains)
-        : CosmeticHideRule(selector: selector, domains: domains);
+        ? CosmeticExceptionRule(
+            selector: selector,
+            includeDomains: includeDomains,
+            excludeDomains: excludeDomains,
+          )
+        : CosmeticHideRule(
+            selector: selector,
+            includeDomains: includeDomains,
+            excludeDomains: excludeDomains,
+          );
   }
 
   FilterRule? _parseScriptlet(String line, String separator) {
@@ -189,7 +218,9 @@ class AdblockPlusParser implements FilterListParser {
     final (
       :types,
       isThirdPartyOnly: isThirdParty,
+      isFirstPartyOnly: isFirstParty,
       :isImportant,
+      :isMatchCase,
       includeDomains: include,
       excludeDomains: exclude,
     ) = options;
@@ -199,7 +230,9 @@ class AdblockPlusParser implements FilterListParser {
         pattern: pattern,
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
+        isFirstPartyOnly: isFirstParty,
         isImportant: isImportant,
+        isMatchCase: isMatchCase,
         includeDomains: include,
         excludeDomains: exclude,
       );
@@ -208,7 +241,9 @@ class AdblockPlusParser implements FilterListParser {
         pattern: pattern,
         resourceTypes: types,
         isThirdPartyOnly: isThirdParty,
+        isFirstPartyOnly: isFirstParty,
         isImportant: isImportant,
+        isMatchCase: isMatchCase,
         includeDomains: include,
         excludeDomains: exclude,
       );
@@ -218,7 +253,9 @@ class AdblockPlusParser implements FilterListParser {
   ({
     Set<ResourceType> types,
     bool isThirdPartyOnly,
+    bool isFirstPartyOnly,
     bool isImportant,
+    bool isMatchCase,
     Set<String>? includeDomains,
     Set<String>? excludeDomains,
   })?
@@ -227,7 +264,9 @@ class AdblockPlusParser implements FilterListParser {
       return (
         types: <ResourceType>{},
         isThirdPartyOnly: false,
+        isFirstPartyOnly: false,
         isImportant: false,
+        isMatchCase: false,
         includeDomains: null,
         excludeDomains: null,
       );
@@ -237,7 +276,9 @@ class AdblockPlusParser implements FilterListParser {
     final excludedTypes = <ResourceType>{};
     var hasPositiveTypes = false;
     var isThirdPartyOnly = false;
+    var isFirstPartyOnly = false;
     var isImportant = false;
+    var isMatchCase = false;
     Set<String>? includeDomains;
     Set<String>? excludeDomains;
 
@@ -258,10 +299,12 @@ class AdblockPlusParser implements FilterListParser {
 
       if (p == 'important') {
         isImportant = true;
+      } else if (p == 'match-case') {
+        isMatchCase = true;
       } else if (p == 'third-party' || p == '3p') {
         isThirdPartyOnly = true;
       } else if (p == '~third-party' || p == 'first-party' || p == '1p') {
-        return null;
+        isFirstPartyOnly = true;
       } else if (p.startsWith('domain=') || p.startsWith('from=')) {
         final domStr = p.substring(p.indexOf('=') + 1);
         final domParts = domStr.split('|');
@@ -299,10 +342,14 @@ class AdblockPlusParser implements FilterListParser {
     }
     types.removeAll(excludedTypes);
 
+    if (isFirstPartyOnly && isThirdPartyOnly) return null;
+
     return (
       types: types,
       isThirdPartyOnly: isThirdPartyOnly,
+      isFirstPartyOnly: isFirstPartyOnly,
       isImportant: isImportant,
+      isMatchCase: isMatchCase,
       includeDomains: includeDomains,
       excludeDomains: excludeDomains,
     );

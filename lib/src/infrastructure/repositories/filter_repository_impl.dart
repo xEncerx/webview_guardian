@@ -8,13 +8,16 @@ class FilterRepositoryImpl implements FilterRepository {
     required FilterMatcher matcher,
     required FilterEngineRef engineRef,
     required WebViewObserver? observer,
+    WebViewObservabilityOptions observabilityOptions = const WebViewObservabilityOptions(),
   }) : _matcher = matcher,
        _engineRef = engineRef,
-       _observer = observer;
+       _observer = observer,
+       _observabilityOptions = observabilityOptions;
 
   final FilterMatcher _matcher;
   final FilterEngineRef _engineRef;
   final WebViewObserver? _observer;
+  final WebViewObservabilityOptions _observabilityOptions;
 
   @override
   FilterDecision lookupNetworkRequest(NetworkRequest request) {
@@ -22,9 +25,13 @@ class FilterRepositoryImpl implements FilterRepository {
 
     switch (decision) {
       case Block():
-        _observer?.onEvent(RequestBlocked(request.url));
+        if (_observabilityOptions.emitBlockedRequests) {
+          _observer?.onEvent(RequestBlocked(request.url));
+        }
       case Allow():
-        _observer?.onEvent(RequestAllowed(request.url));
+        if (_observabilityOptions.emitAllowedRequests) {
+          _observer?.onEvent(RequestAllowed(request.url));
+        }
     }
 
     return decision;
@@ -32,32 +39,46 @@ class FilterRepositoryImpl implements FilterRepository {
 
   @override
   List<CosmeticHideRule> getCosmeticRules(String hostname) {
+    return getCosmeticRuleSet(hostname).allRules;
+  }
+
+  @override
+  CosmeticRuleSet getCosmeticRuleSet(String hostname) {
     final engine = _engineRef.current;
     final domainChain = _getDomainChain(hostname).toList(growable: false);
 
     // Single pass: collect exception selectors and hide rules simultaneously
     final exceptionSelectors = <String>{};
     final seen = <String>{};
-    final result = <CosmeticHideRule>[];
+    final domainSpecificRules = <CosmeticHideRule>[];
+    final genericRules = <CosmeticHideRule>[];
 
     for (final domain in domainChain) {
       engine.cosmeticExceptionRules[domain]?.forEach((ex) {
-        exceptionSelectors.add(ex.selector);
+        if (!_isCosmeticRuleExcluded(hostname, ex.excludeDomains)) {
+          exceptionSelectors.add(ex.selector);
+        }
       });
     }
 
     for (final domain in domainChain) {
       engine.cosmeticHideRules[domain]?.forEach((rule) {
-        if (!exceptionSelectors.contains(rule.selector) && seen.add(rule.selector)) {
-          result.add(rule);
-          _observer?.onEvent(
-            CosmeticCssInjected(hostname: hostname, selector: rule.selector),
-          );
+        if (!_isCosmeticRuleExcluded(hostname, rule.excludeDomains) &&
+            !exceptionSelectors.contains(rule.selector) &&
+            seen.add(rule.selector)) {
+          if (_isGenericCosmeticBucket(domain)) {
+            genericRules.add(rule);
+          } else {
+            domainSpecificRules.add(rule);
+          }
         }
       });
     }
 
-    return result;
+    return CosmeticRuleSet(
+      domainSpecificRules: domainSpecificRules,
+      genericRules: genericRules,
+    );
   }
 
   @override
@@ -70,9 +91,6 @@ class FilterRepositoryImpl implements FilterRepository {
       engine.scriptletRules[domain]?.forEach((rule) {
         if (seen.add(rule.scriptletName)) {
           result.add(rule);
-          _observer?.onEvent(
-            ScriptletInjected(hostname: hostname, scriptletName: rule.scriptletName),
-          );
         }
       });
     }
@@ -92,7 +110,23 @@ class FilterRepositoryImpl implements FilterRepository {
       dotIndex = current.indexOf('.', dotIndex + 1);
     }
 
-    // Empty string is used as a key for global rules matching all domains
+    // Empty string and '*' are both used by serialized engines for global rules.
     yield '';
+    yield '*';
   }
+
+  bool _isCosmeticRuleExcluded(String hostname, List<String>? excludeDomains) {
+    if (excludeDomains == null) return false;
+
+    final normalizedHost = hostname.startsWith('www.') ? hostname.substring(4) : hostname;
+    for (final domain in excludeDomains) {
+      final normalizedDomain = domain.startsWith('www.') ? domain.substring(4) : domain;
+      if (normalizedHost == normalizedDomain || normalizedHost.endsWith('.$normalizedDomain')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isGenericCosmeticBucket(String domain) => domain == '*' || domain.isEmpty;
 }

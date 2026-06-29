@@ -1,6 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:test/test.dart';
+import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/engine/engine.dart';
+
+Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
 NetworkRequest _req(
   String url, {
@@ -20,6 +26,7 @@ NetworkBlockRule _block(
   String pattern, {
   Set<ResourceType>? resourceTypes,
   bool isThirdPartyOnly = false,
+  bool isMatchCase = false,
   Set<String>? includeDomains,
   Set<String>? excludeDomains,
 }) {
@@ -27,6 +34,7 @@ NetworkBlockRule _block(
     pattern: pattern,
     resourceTypes: resourceTypes ?? const {},
     isThirdPartyOnly: isThirdPartyOnly,
+    isMatchCase: isMatchCase,
     includeDomains: includeDomains ?? const {},
     excludeDomains: excludeDomains ?? const {},
   );
@@ -89,6 +97,35 @@ void main() {
 
       expect(
         rule.matchesRequest(_req('https://example.com/banner')),
+        isFalse,
+      );
+    });
+
+    test('should drop when first-party modifier receives third-party request', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'||ads.com^$first-party')).single;
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner', sourceUrl: 'https://ads.com')),
+        isTrue,
+      );
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner')),
+        isFalse,
+      );
+    });
+
+    test('should apply first-party restriction to exception rules', () {
+      final rule = AdblockPlusParser().parse(_bytes(r'@@||ads.com^$1p')).single;
+
+      expect(rule, isA<NetworkExceptionRule>());
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner', sourceUrl: 'https://ads.com')),
+        isTrue,
+      );
+
+      expect(
+        rule.matchesRequest(_req('https://ads.com/banner')),
         isFalse,
       );
     });
@@ -164,10 +201,36 @@ void main() {
       expect(rule.matchesRequest(_req('https://example.com/banner')), isFalse);
     });
 
+    test('should restrict domain anchor matching to the request authority', () {
+      final rule = _block('||example.com^');
+
+      expect(rule.matchesRequest(_req('https://example.com/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://sub.example.com/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://example.com:8080/ad.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://user:pass@example.com/ad.js')), isTrue);
+
+      expect(rule.matchesRequest(_req('https://site.test?u=sub.example.com')), isFalse);
+      expect(rule.matchesRequest(_req('https://site.test#u=sub.example.com')), isFalse);
+      expect(rule.matchesRequest(_req('https://sub.example.com@site.test/ad.js')), isFalse);
+    });
+
     test('should match domain anchor with path (||)', () {
       final rule = _block('||example.com/ads/');
       expect(rule.matchesRequest(_req('https://example.com/ads/banner.jpg')), isTrue);
       expect(rule.matchesRequest(_req('https://example.com/images/banner.jpg')), isFalse);
+    });
+
+    test('should match network rules case-insensitively by default', () {
+      final rule = _block('||example.com/AdBanner.js');
+
+      expect(rule.matchesRequest(_req('https://EXAMPLE.com/adbanner.js')), isTrue);
+    });
+
+    test(r'should respect $match-case for network rules', () {
+      final rule = _block('||example.com/AdBanner.js', isMatchCase: true);
+
+      expect(rule.matchesRequest(_req('https://example.com/AdBanner.js')), isTrue);
+      expect(rule.matchesRequest(_req('https://example.com/adbanner.js')), isFalse);
     });
 
     test('should match separator (^)', () {
