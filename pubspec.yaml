@@ -5,6 +5,13 @@ homepage: https://github.com/xEncerx/webview_guardian
 repository: https://github.com/xEncerx/webview_guardian
 issue_tracker: https://github.com/xEncerx/webview_guardian/issues
 
+topics:
+  - flutter
+  - webview
+  - inappwebview
+  - adblock
+  - privacy
+
 environment:
   sdk: ^3.8.0
 
