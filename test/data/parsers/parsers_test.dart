@@ -503,7 +503,7 @@ void main() {
 
       test('should drop unsupported cosmetic and scriptlet exception syntaxes', () {
         final bytes = _bytes(
-          "example.com#@\$#body { background: #000 !important; }\n"
+          'example.com#@\$#body { background: #000 !important; }\n'
           "example.com#@%#//scriptlet('abort-on-property-read', 'ads')",
         );
         final rules = parser.parse(bytes).toList();

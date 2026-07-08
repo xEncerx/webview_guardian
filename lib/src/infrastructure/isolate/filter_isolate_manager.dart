@@ -141,6 +141,7 @@ class FilterIsolateManager implements FilterJobRunner {
             if (_activeJob != completer || completer.isCompleted) return;
             sendSubscriptions(subscriptions: subscriptions, httpOptions: httpOptions);
           })
+          // ignore: avoid_types_on_closure_parameters
           .onError((Object error, StackTrace stackTrace) {
             if (_activeJob == completer) _activeJob = null;
             if (!completer.isCompleted) completer.completeError(error, stackTrace);
@@ -164,6 +165,7 @@ class FilterIsolateManager implements FilterJobRunner {
             if (_activeJob != completer || completer.isCompleted) return;
             sendClearCacheCommand();
           })
+          // ignore: avoid_types_on_closure_parameters
           .onError((Object error, StackTrace stackTrace) {
             if (_activeJob == completer) {
               _activeJob = null;
