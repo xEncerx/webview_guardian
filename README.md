@@ -353,6 +353,35 @@ await adblockService.init(
 
 `proxy` supports `http://`, `https://`, `socks4://`, and `socks5://` URLs.
 
+You can also update these options after initialization. By default, new options
+are used by the next scheduled or manual subscription update:
+
+```dart
+await adblockService.updateHttpOptions(
+  const FilterHttpOptions(
+    headers: {
+      'Authorization': 'Bearer refreshed-token',
+    },
+    proxy: 'socks5://127.0.0.1:1080',
+  ),
+);
+```
+
+Pass `refreshFilters: true` to immediately refetch the current subscriptions
+with the new options:
+
+```dart
+await adblockService.updateHttpOptions(
+  const FilterHttpOptions(
+    headers: {
+      'Authorization': 'Bearer refreshed-token',
+    },
+    proxy: 'socks5://127.0.0.1:1080',
+  ),
+  refreshFilters: true,
+);
+```
+
 ## WebView API
 
 `WebView` accepts these commonly used parameters:

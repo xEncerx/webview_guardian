@@ -609,6 +609,117 @@ example.com##.sponsored
       service.dispose();
     });
 
+    test('updateHttpOptions updates options used by the next subscription update', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      const initialOptions = FilterHttpOptions(headers: {'x-request': 'initial'});
+      const updatedOptions = FilterHttpOptions(
+        headers: {'x-request': 'runtime'},
+        proxy: 'socks5://127.0.0.1:1080',
+      );
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        httpOptions: initialOptions,
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+      await runner.waitForIdle();
+
+      expect(service.httpOptions, same(initialOptions));
+
+      await service.updateHttpOptions(updatedOptions);
+
+      expect(service.httpOptions, same(updatedOptions));
+      expect(runner.startedSubscriptions, hasLength(1));
+
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'updated.txt'),
+      ]);
+      await runner.waitForStartedCount(2);
+
+      expect(runner.startedSubscriptions.last.single.url, 'updated.txt');
+      expect(runner.startedHttpOptions.last, same(updatedOptions));
+
+      runner.completeCurrent();
+      await updateFuture;
+      await runner.waitForIdle();
+      service.dispose();
+    });
+
+    test(
+      'updateHttpOptions with refreshFilters schedules rebuild with current subscriptions',
+      () async {
+        final runner = _ControllableFilterJobRunner();
+        final service = AdblockService.createForTest(jobRunner: runner);
+        const updatedOptions = FilterHttpOptions(headers: {'x-request': 'runtime'});
+
+        final initFuture = service.init(
+          subscriptions: const [FilterSubscription(url: 'initial.txt')],
+          storagePath: tempDir.path,
+        );
+        await runner.waitForStartedCount(1);
+        runner.completeCurrent();
+        await initFuture;
+        await runner.waitForIdle();
+
+        final refreshFuture = service.updateHttpOptions(
+          updatedOptions,
+          refreshFilters: true,
+        );
+        await runner.waitForStartedCount(2);
+
+        expect(runner.startedOperations, ['build:initial.txt', 'build:initial.txt']);
+        expect(runner.startedHttpOptions.last, same(updatedOptions));
+        expect(service.isReady.value, isFalse);
+
+        runner.completeCurrent();
+        await refreshFuture;
+        await runner.waitForIdle();
+        service.dispose();
+      },
+    );
+
+    test('updateHttpOptions with refreshFilters replaces pending build options', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      const updatedOptions = FilterHttpOptions(headers: {'x-request': 'runtime'});
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'pending-update.txt'),
+      ]);
+      final refreshFuture = service.updateHttpOptions(
+        updatedOptions,
+        refreshFilters: true,
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(runner.startedOperations, ['build:initial.txt']);
+
+      runner.completeCurrent();
+      await runner.waitForStartedCount(2);
+      await initFuture;
+
+      expect(runner.startedOperations, ['build:initial.txt', 'build:pending-update.txt']);
+      expect(runner.startedHttpOptions.last, same(updatedOptions));
+      expect(await _isCompleted(updateFuture), isFalse);
+      expect(await _isCompleted(refreshFuture), isFalse);
+
+      runner.completeCurrent();
+      await updateFuture;
+      await refreshFuture;
+      await runner.waitForIdle();
+      service.dispose();
+    });
+
     test('clearCache runs before pending subscription update', () async {
       final runner = _ControllableFilterJobRunner();
       final service = AdblockService.createForTest(jobRunner: runner);
@@ -678,6 +789,10 @@ example.com##.sponsored
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
         throwsStateError,
       );
+      expect(
+        () => service.updateHttpOptions(const FilterHttpOptions()),
+        throwsStateError,
+      );
       expect(service.clearCache, throwsStateError);
 
       final initFuture = service.init(
@@ -698,6 +813,10 @@ example.com##.sponsored
       );
       expect(
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
+        throwsStateError,
+      );
+      expect(
+        () => service.updateHttpOptions(const FilterHttpOptions()),
         throwsStateError,
       );
       expect(service.clearCache, throwsStateError);

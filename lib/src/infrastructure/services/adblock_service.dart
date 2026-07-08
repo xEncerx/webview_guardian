@@ -95,6 +95,9 @@ class AdblockService {
   /// The current list of filter subscriptions.
   List<FilterSubscription> get subscriptions => List.unmodifiable(_subscriptions);
 
+  /// The HTTP options used for future filter-list downloads.
+  FilterHttpOptions get httpOptions => _httpOptions;
+
   /// Initializes the service by parsing subscriptions and starting the background worker isolate.
   ///
   /// - **[subscriptions]**: A list of [FilterSubscription] objects defining which
@@ -237,6 +240,24 @@ class AdblockService {
 
     _setupTimers();
 
+    return _scheduleBuildJob(_subscriptions);
+  }
+
+  /// Replaces the HTTP options used by future filter-list downloads.
+  ///
+  /// When [refreshFilters] is `true`, the current subscriptions are immediately
+  /// rebuilt using the new options. Otherwise, the options are applied to the
+  /// next scheduled subscription update.
+  Future<void> updateHttpOptions(
+    FilterHttpOptions httpOptions, {
+    bool refreshFilters = false,
+  }) {
+    _ensureReadyForCommand();
+    _httpOptions = httpOptions;
+
+    if (!refreshFilters) return Future<void>.value();
+
+    isReady.value = false;
     return _scheduleBuildJob(_subscriptions);
   }
 
