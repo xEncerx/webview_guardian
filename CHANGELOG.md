@@ -9,6 +9,7 @@
 
 - Support Adblock Plus `#$#` CSS injection rules globally and for domain include/exclude lists.
 - Add `AdblockService.updateHttpOptions` to update filter download headers, proxy, and timeouts at runtime, with an optional immediate filter refresh.
+- Add configurable filter-list response size and concurrent download limits.
 
 ### Fixed
 
@@ -18,10 +19,12 @@
 - Preserve caller-owned WebView user scripts when Guardian refreshes its host-specific injections.
 - Propagate terminal filter build and cache-clear failures through their public futures.
 - Reject `AdblockService.init()` immediately on unsupported platforms before starting filter jobs.
+- Close worker-owned HTTP clients and reject filter lists that exceed the configured size limit.
 
 ### Changed
 
 - Make periodic filter updates opt-in by defaulting `FilterSubscription.updateInterval` to `null`.
+- Require every internal `FilterListClient` implementation to dispose its resources asynchronously.
 
 ## 0.2.1
 

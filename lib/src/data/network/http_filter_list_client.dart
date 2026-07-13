@@ -25,9 +25,23 @@ class HttpFilterListClient implements FilterListClient {
 
     final response = await request.close().timeout(_options.receiveTimeout);
     await _validateSuccessfulResponse(response, uri);
+    if (response.contentLength > _options.maxFilterListBytes) {
+      final socket = await response.detachSocket();
+      socket.destroy();
+      throw _filterListTooLarge(uri);
+    }
 
     final builder = BytesBuilder(copy: false);
-    await response.forEach(builder.add).timeout(_options.receiveTimeout);
+    var bytesRead = 0;
+    await response
+        .forEach((chunk) {
+          bytesRead += chunk.length;
+          if (bytesRead > _options.maxFilterListBytes) {
+            throw _filterListTooLarge(uri);
+          }
+          builder.add(chunk);
+        })
+        .timeout(_options.receiveTimeout);
 
     return FilterFetchResult(bytes: builder.takeBytes(), etag: response.headers.value('etag'));
   }
@@ -45,9 +59,9 @@ class HttpFilterListClient implements FilterListClient {
     return FilterHeadResult(etag: response.headers.value('etag'));
   }
 
-  /// Closes the underlying HTTP client and releases any idle connections.
-  void close({bool force = false}) {
-    _client.close(force: force);
+  @override
+  Future<void> dispose() async {
+    _client.close(force: true);
   }
 
   void _applyHeaders(HttpClientRequest request) {
@@ -59,6 +73,11 @@ class HttpFilterListClient implements FilterListClient {
       request.headers.set(entry.key, entry.value);
     }
   }
+
+  HttpException _filterListTooLarge(Uri uri) => HttpException(
+    'Filter list exceeds the configured limit of ${_options.maxFilterListBytes} bytes',
+    uri: uri,
+  );
 
   void _configureProxy(String proxyUrl) {
     final uri = Uri.tryParse(proxyUrl);

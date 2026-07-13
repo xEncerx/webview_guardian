@@ -343,18 +343,19 @@ await adblockService.init(
   httpOptions: const FilterHttpOptions(
     connectTimeout: Duration(seconds: 15),
     receiveTimeout: Duration(seconds: 60),
+    maxFilterListBytes: 32 * 1024 * 1024,
+    maxConcurrentDownloads: 4,
     headers: {
       'User-Agent': 'MyApp/1.0',
     },
-    proxy: 'http://proxy.example.com:8080',
+    proxy: 'http://proxy.example.com:8080', // supports `http://`, `https://`, `socks4://`, and `socks5://` URLs
   ),
 );
 ```
 
-`proxy` supports `http://`, `https://`, `socks4://`, and `socks5://` URLs.
+Filter-list responses default to a 32 MiB limit, with at most four subscription downloads processed concurrently.
 
-You can also update these options after initialization. By default, new options
-are used by the next scheduled or manual subscription update:
+You can also update these options after initialization. By default, new options are used by the next scheduled or manual subscription update:
 
 ```dart
 await adblockService.updateHttpOptions(

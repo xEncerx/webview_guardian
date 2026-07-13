@@ -165,6 +165,73 @@ first.example,second.example#$#body { color: red; }
       manager.dispose();
     });
   });
+
+  test('limits concurrent subscription downloads and preserves URL metadata', () async {
+    final tempDir = Directory.systemTemp.createTempSync('filter_parser_worker_test_');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final errors = <WebViewError>[];
+    var activeDownloads = 0;
+    var maxActiveDownloads = 0;
+    server.listen((request) async {
+      request.response.persistentConnection = false;
+      if (request.method == 'HEAD') {
+        request.response.statusCode = HttpStatus.methodNotAllowed;
+        await request.response.close();
+        return;
+      }
+
+      activeDownloads++;
+      if (activeDownloads > maxActiveDownloads) maxActiveDownloads = activeDownloads;
+      final name = request.uri.pathSegments.single;
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        request.response
+          ..headers.set(HttpHeaders.etagHeader, 'etag-$name')
+          ..write('[Adblock Plus 2.0]\n||$name.example^');
+        await request.response.close();
+      } finally {
+        activeDownloads--;
+      }
+    });
+    final subscriptions = List.generate(
+      5,
+      (index) => FilterSubscription(
+        url: 'http://${server.address.address}:${server.port}/list-$index',
+      ),
+    );
+    final manager = FilterIsolateManager(
+      onEngineReady: (_, _, _, _) {},
+      onWorkerEvent: (_) {},
+      onWorkerError: errors.add,
+    );
+
+    try {
+      await manager
+          .runBuildJob(
+            subscriptions: subscriptions,
+            httpOptions: const FilterHttpOptions(
+              maxConcurrentDownloads: 2,
+              connectTimeout: Duration(seconds: 1),
+              receiveTimeout: Duration(seconds: 2),
+            ),
+            storagePath: tempDir.path,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      expect(maxActiveDownloads, 2);
+      expect(errors.whereType<FilterFetchFailed>(), isEmpty);
+      final storage = FilterStorage(overridePath: tempDir.path);
+      for (final subscription in subscriptions) {
+        final name = Uri.parse(subscription.url).pathSegments.single;
+        final metadata = await storage.loadFilterListMetadata(subscription.url);
+        expect(metadata?.etag, 'etag-$name');
+      }
+    } finally {
+      manager.dispose();
+      await server.close(force: true);
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    }
+  });
 }
 
 NetworkRequest _request(String url) {
