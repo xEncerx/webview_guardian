@@ -95,7 +95,7 @@ class _BrowserPageState extends State<BrowserPage> {
         }
 
         return WebView(
-          initialUrl: 'https://example.com',
+          initialUrl: Uri.parse('https://example.com'),
           adblockService: _adblockService,
         );
       },
@@ -112,7 +112,7 @@ Ad blocking is optional. If you do not pass `adblockService`, the widget behaves
 
 ```dart
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   onWebViewCreated: (controller) async {
     final url = await controller.getUrl();
     debugPrint('Current URL: $url');
@@ -388,7 +388,7 @@ await adblockService.updateHttpOptions(
 
 | Parameter                | Description                                                   |
 | ------------------------ | ------------------------------------------------------------- |
-| `initialUrl`             | URL loaded when the widget is created.                        |
+| `initialUrl`             | `Uri` loaded when the widget is created.                      |
 | `adblockService`         | Optional `AdblockService`. Omit it to disable ad blocking.    |
 | `enablePullToRefresh`    | Enables pull-to-refresh where supported. Defaults to `false`. |
 | `pullToRefreshSettings`  | Colors and size for pull-to-refresh.                          |
@@ -420,7 +420,7 @@ Example with navigation controls:
 WebViewController? controller;
 
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   adblockService: adblockService,
   onWebViewCreated: (createdController) {
     controller = createdController;
@@ -436,7 +436,7 @@ WebView(
 
 ```dart
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   enablePullToRefresh: true,
   pullToRefreshSettings: const WebViewPullToRefreshSettings(
     color: Colors.blue,

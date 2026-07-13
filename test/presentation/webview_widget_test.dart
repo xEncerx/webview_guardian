@@ -95,13 +95,37 @@ void main() {
       service.dispose();
     });
 
+    testWidgets('uses the initial Uri for the platform request and adblock host', (tester) async {
+      service.ready.value = true;
+      final initialUri = Uri.parse('https://sub.example.com/path?item=1');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: initialUri,
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+      final requestedUrl = webViewParams.initialUrlRequest?.url;
+
+      expect(requestedUrl, isNotNull);
+      expect(requestedUrl!.toString(), initialUri.toString());
+      expect(requestedUrl.host, initialUri.host);
+      expect(webViewParams.initialUserScripts, hasLength(1));
+      expect(webViewParams.initialUserScripts!.single.source, contains(initialUri.host));
+    });
+
     testWidgets('retries same-host injection when initial scripts were unavailable', (
       tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -134,7 +158,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -156,7 +180,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -183,7 +207,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -208,7 +232,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -236,8 +260,8 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: WebView(initialUrl: 'https://example.com'),
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
         ),
       );
 
@@ -262,7 +286,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -273,8 +297,8 @@ void main() {
       expect(webView.platform.params.shouldOverrideUrlLoading, isNotNull);
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: WebView(initialUrl: 'https://example.com'),
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
         ),
       );
 
@@ -295,7 +319,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),

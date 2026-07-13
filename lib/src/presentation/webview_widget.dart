@@ -29,7 +29,7 @@ class WebView extends StatefulWidget {
   });
 
   /// The initial URL to load.
-  final String initialUrl;
+  final Uri initialUrl;
 
   /// The global adblock service. If null, the WebView operates normally without adblocking.
   final AdblockService? adblockService;
@@ -87,7 +87,7 @@ class _WebViewState extends State<WebView> {
   void initState() {
     super.initState();
 
-    _initialUri = WebUri(widget.initialUrl);
+    _initialUri = WebUri.uri(widget.initialUrl);
     _configureAdblockAdapter();
   }
 
@@ -193,7 +193,7 @@ class _WebViewState extends State<WebView> {
         : InAppWebViewAdblockAdapter(
             adblockService: service,
             baseSettings: _buildBaseSettings(),
-            initialUrl: Uri.tryParse(widget.initialUrl),
+            initialUrl: widget.initialUrl,
           );
     _settings = _adblockAdapter?.initialSettings ?? _buildBaseSettings();
   }

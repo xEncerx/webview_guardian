@@ -3,6 +3,7 @@
 ### Breaking changes
 
 - Remove the unused `id` and `lastEtag` named parameters from `FilterSubscription.copyWith`.
+- Change `WebView.initialUrl` from `String` to `Uri` so callers provide a parsed initial URL.
 
 ### Added
 
