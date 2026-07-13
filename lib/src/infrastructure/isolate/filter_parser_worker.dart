@@ -14,7 +14,7 @@ import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
 const _engineCacheFormatVersion = 4;
-const _filterParserVersion = 2;
+const _filterParserVersion = 3;
 typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
 
 /// Arguments passed to the filter parser worker isolate on startup.

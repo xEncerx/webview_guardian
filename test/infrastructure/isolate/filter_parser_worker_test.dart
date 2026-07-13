@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
@@ -63,6 +66,50 @@ void main() {
       );
 
       expect(missingIdentity, isNot(presentIdentity));
+    });
+
+    test('does not reuse compiled cache identity from parser version 2', () async {
+      const subscription = FilterSubscription(
+        url: 'https://filters.test/list.txt',
+        updateInterval: Duration(hours: 6),
+      );
+      final metadata = _metadata(payloadSha256: 'a' * 64, payloadLength: 10);
+      final metadataByUrl = {subscription.url: metadata};
+      final previousIdentity = sha256
+          .convert(
+            utf8.encode(
+              jsonEncode({
+                'engineCacheFormatVersion': 4,
+                'filterParserVersion': 2,
+                'subscriptions': [
+                  {
+                    'url': subscription.url,
+                    'updateIntervalMicroseconds': subscription.updateInterval?.inMicroseconds,
+                    'filterSha256': metadata.payloadSha256,
+                    'filterLength': metadata.payloadLength,
+                  },
+                ],
+              }),
+            ),
+          )
+          .toString();
+      final currentIdentity = buildEngineCacheIdentityForTesting(
+        subscriptions: [subscription],
+        metadataByUrl: metadataByUrl,
+      );
+      final tempDir = Directory.systemTemp.createTempSync('filter_parser_worker_test_');
+      final storage = FilterStorage(overridePath: tempDir.path);
+
+      try {
+        await storage.saveEngineBytes(
+          Uint8List.fromList([1, 2, 3]),
+          cacheIdentity: previousIdentity,
+        );
+
+        expect(await storage.loadEngineBytes(cacheIdentity: currentIdentity), isNull);
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
     });
   });
 

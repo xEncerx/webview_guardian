@@ -420,6 +420,25 @@ void main() {
     });
 
     group('Edge cases and specific modifiers', () {
+      test('should drop unknown positive network modifiers but preserve unknown negatives', () {
+        final rules = parser
+            .parse(
+              _bytes(
+                r'||unknown-positive.com^$popup'
+                '\n'
+                r'||mixed-positive.com^$script,popup'
+                '\n'
+                r'@@||unknown-positive-exception.com^$popup'
+                '\n'
+                r'||unknown-negative.com^$~popup',
+              ),
+            )
+            .toList();
+
+        expect(rules, hasLength(1));
+        expect((rules.single as NetworkBlockRule).pattern, '||unknown-negative.com^');
+      });
+
       test('should completely drop rules with badfilter modifier', () {
         final bytes = _bytes('||example.com^\$script,badfilter\n@@||test.com^\$badfilter');
         final rules = parser.parse(bytes).toList();

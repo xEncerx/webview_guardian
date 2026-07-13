@@ -345,10 +345,9 @@ class AdblockPlusParser implements FilterListParser {
         }
       } else {
         final type = _parseResourceType(p);
-        if (type != null) {
-          types.add(type);
-          hasPositiveTypes = true;
-        }
+        if (type == null) return null;
+        types.add(type);
+        hasPositiveTypes = true;
       }
     }
 
