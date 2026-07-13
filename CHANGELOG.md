@@ -16,6 +16,7 @@
 - Preserve every active filter subscription when a periodic rebuild runs.
 - Preserve caller-owned WebView user scripts when Guardian refreshes its host-specific injections.
 - Propagate terminal filter build and cache-clear failures through their public futures.
+- Reject `AdblockService.init()` immediately on unsupported platforms before starting filter jobs.
 
 ### Changed
 

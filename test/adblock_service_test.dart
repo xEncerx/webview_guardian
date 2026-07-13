@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:webview_guardian/src/data/data.dart';
@@ -845,6 +846,44 @@ example.com##.sponsored
       await runner.waitForStartedCount(2);
       runner.completeCurrent();
       await retryFuture;
+    });
+
+    test('init rejects unsupported platform before starting a filter job', () async {
+      final runner = _ControllableFilterJobRunner();
+      final platformService = AdblockService.createForTest(jobRunner: runner);
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        platformService.dispose();
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      expect(
+        () {
+          unawaited(
+            platformService.init(
+              subscriptions: const [FilterSubscription(url: 'initial.txt')],
+              storagePath: tempDir.path,
+            ),
+          );
+        },
+        throwsA(
+          isA<UnsupportedError>().having(
+            (error) => error.message,
+            'message',
+            'Unsupported platform: TargetPlatform.iOS',
+          ),
+        ),
+      );
+      expect(runner.startedOperations, isEmpty);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final initFuture = platformService.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
     });
 
     test('updateSubscriptions and clearCache propagate runner errors', () async {

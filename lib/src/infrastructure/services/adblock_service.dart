@@ -133,6 +133,9 @@ class AdblockService {
     String? storagePath,
   }) {
     _ensureNotDisposed();
+    if (!supportedPlatforms.contains(defaultTargetPlatform)) {
+      throw UnsupportedError('Unsupported platform: $defaultTargetPlatform');
+    }
     if (_isInitialized || _isInitializing) {
       throw StateError('AdblockService is already initialized.');
     }
