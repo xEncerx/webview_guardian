@@ -116,6 +116,6 @@ extension WebResourceRequestX on WebResourceRequest {
       }
     }
     // Default value for everything else
-    return ResourceType.subdocument;
+    return ResourceType.other;
   }
 }

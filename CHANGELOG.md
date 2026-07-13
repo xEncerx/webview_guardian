@@ -8,6 +8,7 @@
 ### Fixed
 
 - Reject network rules with unknown positive ABP modifiers instead of applying them without their intended constraints.
+- Classify unknown WebView resources as `other` instead of `subdocument` without explicit HTML signals.
 
 ## 0.2.1
 

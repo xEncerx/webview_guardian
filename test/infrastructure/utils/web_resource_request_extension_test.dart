@@ -139,9 +139,9 @@ void main() {
         expect(request.getResourceType(false), ResourceType.image);
       });
 
-      test('should handle URLs without extension correctly', () {
+      test('should classify extensionless URLs without useful headers as other', () {
         setupUrl('https://example.com/path/to/resource');
-        expect(request.getResourceType(false), ResourceType.subdocument);
+        expect(request.getResourceType(false), ResourceType.other);
       });
     });
 
@@ -202,10 +202,10 @@ void main() {
       });
     });
 
-    test('should return subdocument as default fallback', () {
-      setupUrl('https://example.com/unknown/resource');
+    test('should classify unknown extensionless requests with Accept */* as other', () {
+      setupUrl('https://api.example/v1/ads');
       when(() => request.headers).thenReturn({'Accept': '*/*'});
-      expect(request.getResourceType(false), ResourceType.subdocument);
+      expect(request.getResourceType(false), ResourceType.other);
     });
   });
 }
