@@ -20,6 +20,7 @@
 - Propagate terminal filter build and cache-clear failures through their public futures.
 - Reject `AdblockService.init()` immediately on unsupported platforms before starting filter jobs.
 - Close worker-owned HTTP clients and reject filter lists that exceed the configured size limit.
+- Recreate the native WebView when its `adblockService` identity changes so initial settings, scripts, and callbacks stay in sync.
 
 ### Changed
 

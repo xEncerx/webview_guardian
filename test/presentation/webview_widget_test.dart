@@ -51,6 +51,8 @@ class _FakeInAppWebViewPlatform extends InAppWebViewPlatform {
 class _FakePlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {
   _FakePlatformInAppWebViewWidget(super.params) : super.implementation();
 
+  bool isDisposed = false;
+
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
 
@@ -59,7 +61,7 @@ class _FakePlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {
       params.controllerFromPlatform!(controller) as T;
 
   @override
-  void dispose() {}
+  void dispose() => isDisposed = true;
 }
 
 void main() {
@@ -309,6 +311,56 @@ void main() {
       expect(webViewParams.initialSettings?.useShouldOverrideUrlLoading, isFalse);
       expect(webViewParams.shouldInterceptRequest, isNull);
       expect(webViewParams.shouldOverrideUrlLoading, isNull);
+    });
+
+    testWidgets('recreates the platform view only when adblock service identity changes', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: Uri.parse('https://example.com'),
+            adblockService: service,
+          ),
+        ),
+      );
+
+      var platformWidget =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+      platformWidget.params.onWebViewCreated!(controller);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: Uri.parse('https://example.com'),
+            adblockService: service,
+          ),
+        ),
+      );
+
+      expect(platformWidget.isDisposed, isFalse);
+      platformWidget =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
+        ),
+      );
+
+      expect(platformWidget.isDisposed, isTrue);
+      final replacement =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+      expect(replacement, isNot(same(platformWidget)));
+      expect(replacement.params.initialUserScripts, isEmpty);
+      expect(replacement.params.shouldInterceptRequest, isNull);
+      expect(replacement.params.shouldOverrideUrlLoading, isNull);
+      expect(() => replacement.params.onWebViewCreated!(controller), returnsNormally);
     });
 
     testWidgets('updates host scripts before allowing a main-frame navigation', (

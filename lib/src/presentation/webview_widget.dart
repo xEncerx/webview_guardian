@@ -77,7 +77,7 @@ class WebView extends StatefulWidget {
 
 class _WebViewState extends State<WebView> {
   late InAppWebViewSettings _settings;
-  late final InAppWebViewController _controller;
+  late InAppWebViewController _controller;
   InAppWebViewAdblockAdapter? _adblockAdapter;
   PullToRefreshController? _pullToRefreshController;
 
@@ -95,7 +95,7 @@ class _WebViewState extends State<WebView> {
   void didUpdateWidget(covariant WebView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.adblockService != widget.adblockService) {
+    if (!identical(oldWidget.adblockService, widget.adblockService)) {
       _adblockAdapter?.dispose();
       _configureAdblockAdapter();
     }
@@ -144,6 +144,7 @@ class _WebViewState extends State<WebView> {
   @override
   Widget build(BuildContext context) {
     return InAppWebView(
+      key: ObjectKey(widget.adblockService),
       initialUrlRequest: URLRequest(url: _initialUri),
       initialSettings: _settings,
       pullToRefreshController: _pullToRefreshController,
