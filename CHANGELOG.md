@@ -15,6 +15,7 @@
 - Classify unknown WebView resources as `other` instead of `subdocument` without explicit HTML signals.
 - Preserve every active filter subscription when a periodic rebuild runs.
 - Preserve caller-owned WebView user scripts when Guardian refreshes its host-specific injections.
+- Propagate terminal filter build and cache-clear failures through their public futures.
 
 ### Changed
 

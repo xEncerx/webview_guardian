@@ -183,6 +183,7 @@ class AdblockService {
       _isInitialized = true;
       _setupTimers();
     } finally {
+      if (!_isInitialized) _acceptsCommands = false;
       _isInitializing = false;
     }
   }
@@ -303,6 +304,7 @@ class AdblockService {
       _observer?.onError(
         IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
       );
+      rethrow;
     } finally {
       if (_runningBuildVersion == effectiveVersion) _runningBuildVersion = null;
     }
@@ -322,6 +324,7 @@ class AdblockService {
       _observer?.onError(
         IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
       );
+      rethrow;
     }
   }
 

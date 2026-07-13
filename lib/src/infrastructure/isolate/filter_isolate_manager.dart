@@ -261,7 +261,7 @@ class FilterIsolateManager implements FilterJobRunner {
         _onWorkerError(message);
         if (message is CacheRestoreFailed) {
           _completeOnCacheClear = false;
-          _completeActiveJob();
+          _completeActiveJob(message);
         }
 
       case ShutdownAck():
@@ -269,11 +269,13 @@ class FilterIsolateManager implements FilterJobRunner {
     }
   }
 
-  void _completeActiveJob() {
+  void _completeActiveJob([Object? error]) {
     final activeJob = _activeJob;
     if (activeJob == null) return;
     _activeJob = null;
-    if (!activeJob.isCompleted) activeJob.complete();
+    if (!activeJob.isCompleted) {
+      error == null ? activeJob.complete() : activeJob.completeError(error);
+    }
     dispose();
   }
 

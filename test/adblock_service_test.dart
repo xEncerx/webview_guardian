@@ -811,6 +811,77 @@ example.com##.sponsored
       service.dispose();
     });
 
+    test('failed init propagates, rejects commands, and can be retried', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      final errors = <WebViewError>[];
+      final observer = _TestObserver((_) {}, errors.add);
+      final failure = StateError('build failed');
+      addTearDown(service.dispose);
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(1);
+      runner.failCurrent(failure);
+
+      await expectLater(initFuture, throwsA(same(failure)));
+      expect(service.isReady.value, isFalse);
+      expect(
+        () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
+        throwsStateError,
+      );
+      expect(service.clearCache, throwsStateError);
+      expect(errors, hasLength(1));
+      expect(errors.single, isA<IsolateCrashError>());
+
+      final retryFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'retry.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(2);
+      runner.completeCurrent();
+      await retryFuture;
+    });
+
+    test('updateSubscriptions and clearCache propagate runner errors', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      final errors = <WebViewError>[];
+      final observer = _TestObserver((_) {}, errors.add);
+      addTearDown(service.dispose);
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+
+      final buildFailure = StateError('update failed');
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'update.txt'),
+      ]);
+      await runner.waitForStartedCount(2);
+      runner.failCurrent(buildFailure);
+      await expectLater(updateFuture, throwsA(same(buildFailure)));
+
+      final clearFailure = StateError('clear failed');
+      runner.holdNextClear();
+      final clearFuture = service.clearCache();
+      await Future<void>.delayed(Duration.zero);
+      runner.failCurrentClear(clearFailure);
+      await expectLater(clearFuture, throwsA(same(clearFailure)));
+
+      expect(errors, hasLength(2));
+      expect(errors, everyElement(isA<IsolateCrashError>()));
+    });
+
     test('throws when used before init or after dispose', () async {
       final runner = _ControllableFilterJobRunner();
       final service = AdblockService.createForTest(jobRunner: runner);
@@ -967,6 +1038,12 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     current.complete();
   }
 
+  void failCurrent(Object error) {
+    final current = _current;
+    if (current == null || current.isCompleted) return;
+    current.completeError(error);
+  }
+
   void holdNextClear() {
     _holdNextClear = true;
   }
@@ -975,6 +1052,12 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     final current = _currentClear;
     if (current == null || current.isCompleted) return;
     current.complete();
+  }
+
+  void failCurrentClear(Object error) {
+    final current = _currentClear;
+    if (current == null || current.isCompleted) return;
+    current.completeError(error);
   }
 
   Future<void> waitForStartedCount(int count) async {
