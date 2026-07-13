@@ -22,6 +22,8 @@ final class InAppWebViewAdblockAdapter {
     });
   }
 
+  static const _userScriptGroupName = 'webview_guardian';
+
   final AdblockService _adblockService;
   final String? _initialHost;
 
@@ -107,7 +109,11 @@ final class InAppWebViewAdblockAdapter {
     if (hostname == null) return [];
     if (!_canBuildInjections) return [];
 
-    return _adblockService.orchestrator!.buildUserScripts(hostname);
+    final scripts = _adblockService.orchestrator!.buildUserScripts(hostname);
+    for (final script in scripts) {
+      script.groupName = _userScriptGroupName;
+    }
+    return scripts;
   }
 
   bool get _canUseAdblock {
@@ -135,7 +141,7 @@ final class InAppWebViewAdblockAdapter {
 
     final scripts = _getScriptsForHost(hostname);
 
-    await controller.removeAllUserScripts();
+    await controller.removeUserScriptsByGroupName(groupName: _userScriptGroupName);
     for (final script in scripts) {
       await controller.addUserScript(userScript: script);
     }

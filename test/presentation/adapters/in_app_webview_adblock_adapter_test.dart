@@ -131,7 +131,9 @@ void main() {
       controller = _MockInAppWebViewController();
       request = _MockWebResourceRequest();
 
-      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {});
+      when(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).thenAnswer((_) async {});
       when(
         () => controller.addUserScript(userScript: any(named: 'userScript')),
       ).thenAnswer((_) async {});
@@ -199,6 +201,50 @@ void main() {
       expect(orchestrator.requestedHosts, ['example.com']);
     });
 
+    test('preserves caller scripts by replacing only grouped Guardian scripts', () async {
+      var removedAllScripts = false;
+      String? removedGroup;
+      final addedScripts = <UserScript>[];
+      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {
+        removedAllScripts = true;
+      });
+      when(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).thenAnswer((invocation) async {
+        removedGroup = invocation.namedArguments[#groupName] as String;
+      });
+      when(
+        () => controller.addUserScript(userScript: any(named: 'userScript')),
+      ).thenAnswer((invocation) async {
+        addedScripts.add(invocation.namedArguments[#userScript] as UserScript);
+      });
+      final adapter = InAppWebViewAdblockAdapter(
+        adblockService: service,
+        initialUrl: Uri.parse('https://example.com'),
+      );
+
+      final initialScript = adapter.initialUserScripts.single;
+      await adapter.onLoadStart(controller, WebUri('https://other.example'));
+
+      expect(addedScripts, hasLength(1));
+      expect(
+        {
+          'caller scripts preserved': !removedAllScripts,
+          'Guardian group removed': removedGroup == initialScript.groupName,
+          'initial script grouped': initialScript.groupName?.isNotEmpty ?? false,
+          'dynamic script shares group':
+              addedScripts.single.groupName != null &&
+              addedScripts.single.groupName == initialScript.groupName,
+        },
+        {
+          'caller scripts preserved': true,
+          'Guardian group removed': true,
+          'initial script grouped': true,
+          'dynamic script shares group': true,
+        },
+      );
+    });
+
     test('returns empty initial scripts when initial URL is omitted', () {
       final adapter = InAppWebViewAdblockAdapter(adblockService: service);
 
@@ -223,7 +269,9 @@ void main() {
       notReadyService.ready.value = true;
       await adapter.onLoadStart(controller, WebUri('https://example.com'));
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
@@ -241,7 +289,9 @@ void main() {
       expect(adapter.initialUserScripts, isNotEmpty);
       await adapter.onLoadStart(controller, WebUri('https://example.com'));
 
-      verifyNever(() => controller.removeAllUserScripts());
+      verifyNever(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      );
       verifyNever(() => controller.addUserScript(userScript: any(named: 'userScript')));
     });
 
@@ -260,7 +310,9 @@ void main() {
       );
 
       expect(policy, NavigationActionPolicy.ALLOW);
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
@@ -272,14 +324,18 @@ void main() {
 
       await adapter.onLoadStart(controller, WebUri('https://example.com'));
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       var captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
       expect(captured.single.source, contains('example.com:initial'));
 
       reset(controller);
-      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {});
+      when(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).thenAnswer((_) async {});
       when(
         () => controller.addUserScript(userScript: any(named: 'userScript')),
       ).thenAnswer((_) async {});
@@ -290,7 +346,9 @@ void main() {
 
       await adapter.onLoadStart(controller, WebUri('https://example.com'));
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();

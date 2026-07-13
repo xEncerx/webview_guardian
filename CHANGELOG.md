@@ -10,6 +10,7 @@
 - Reject network rules with unknown positive ABP modifiers instead of applying them without their intended constraints.
 - Classify unknown WebView resources as `other` instead of `subdocument` without explicit HTML signals.
 - Preserve every active filter subscription when a periodic rebuild runs.
+- Preserve caller-owned WebView user scripts when Guardian refreshes its host-specific injections.
 
 ### Changed
 

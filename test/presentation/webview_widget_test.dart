@@ -83,7 +83,9 @@ void main() {
       service = _FakeAdblockService(_FakeInjectionOrchestrator());
       controller = _MockInAppWebViewController();
 
-      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {});
+      when(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).thenAnswer((_) async {});
       when(
         () => controller.addUserScript(userScript: any(named: 'userScript')),
       ).thenAnswer((_) async {});
@@ -116,7 +118,9 @@ void main() {
       webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
       await tester.pump();
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       verify(() => controller.addUserScript(userScript: any(named: 'userScript'))).called(
         greaterThan(0),
       );
@@ -165,7 +169,9 @@ void main() {
       webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
       await tester.pump();
 
-      verifyNever(() => controller.removeAllUserScripts());
+      verifyNever(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      );
       verifyNever(() => controller.addUserScript(userScript: any(named: 'userScript')));
     });
 
@@ -216,7 +222,9 @@ void main() {
         ),
       );
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
@@ -309,7 +317,9 @@ void main() {
       );
 
       expect(policy, NavigationActionPolicy.ALLOW);
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
