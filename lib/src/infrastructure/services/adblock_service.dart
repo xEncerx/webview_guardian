@@ -341,11 +341,10 @@ class AdblockService {
 
     for (final entry in grouped.entries) {
       final interval = entry.key;
-      final subs = List<FilterSubscription>.unmodifiable(entry.value);
 
       _updateTimers.add(
         Timer.periodic(interval, (_) {
-          unawaited(_scheduleBuildJob(subs));
+          unawaited(_scheduleBuildJob(_subscriptions));
         }),
       );
     }

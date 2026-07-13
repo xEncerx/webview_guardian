@@ -519,6 +519,33 @@ example.com##.sponsored
       expect(fetchStartedCountAfter, greaterThan(fetchStartedCountInitial));
     });
 
+    test('subscriptions do not periodically update by default', () {
+      expect(const FilterSubscription(url: 'filters.txt').updateInterval, isNull);
+    });
+
+    test('timer rebuild includes periodic and non-periodic subscriptions', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      addTearDown(service.dispose);
+      const periodic = FilterSubscription(
+        url: 'periodic.txt',
+        updateInterval: Duration(milliseconds: 1),
+      );
+      const nonPeriodic = FilterSubscription(url: 'non-periodic.txt');
+
+      final initFuture = service.init(
+        subscriptions: const [periodic, nonPeriodic],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+
+      await runner.waitForStartedCount(2).timeout(const Duration(seconds: 5));
+
+      expect(runner.startedSubscriptions[1], const [periodic, nonPeriodic]);
+    });
+
     test('should bypass interceptor when isEnabled is false', () async {
       await service.init(
         subscriptions: [FilterSubscription(url: validFilterFile.path)],
@@ -912,7 +939,9 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     startedSubscriptions.add(List.of(subscriptions));
     startedHttpOptions.add(httpOptions);
     startedStoragePaths.add(storagePath);
-    startedOperations.add('build:${subscriptions.single.url}');
+    startedOperations.add(
+      'build:${subscriptions.map((subscription) => subscription.url).join(',')}',
+    );
     _startedController.add(startedSubscriptions.length);
     _current = Completer<void>();
     return _current!.future.whenComplete(() => _current = null);

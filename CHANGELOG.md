@@ -9,6 +9,11 @@
 
 - Reject network rules with unknown positive ABP modifiers instead of applying them without their intended constraints.
 - Classify unknown WebView resources as `other` instead of `subdocument` without explicit HTML signals.
+- Preserve every active filter subscription when a periodic rebuild runs.
+
+### Changed
+
+- Make periodic filter updates opt-in by defaulting `FilterSubscription.updateInterval` to `null`.
 
 ## 0.2.1
 
