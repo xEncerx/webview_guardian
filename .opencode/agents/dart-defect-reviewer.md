@@ -3,7 +3,33 @@ description: Independently verifies a Dart or Flutter defect repair and reports 
 mode: subagent
 permission:
   edit: deny
-  bash: ask
+  bash:
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git blame*": allow
+    "git rev-parse*": allow
+    "git ls-files*": allow
+    "git check-ignore*": allow
+    "git merge-base*": allow
+    "git diff-tree*": allow
+    "git diff-index*": allow
+    "git diff-files*": allow
+    "git name-rev*": allow
+    "git describe*": allow
+    "git shortlog*": allow
+    "git branch --show-current*": allow
+    "git tag --list*": allow
+    "git remote -v*": allow
+    "git diff*--output*": ask
+    "git log*--output*": ask
+    "git show*--output*": ask
+    "git *>*": ask
+    "flutter test*": allow
+    "dart format --output=none --set-exit-if-changed*": allow
+    "flutter analyze*": allow
 ---
 
 You are the independent acceptance reviewer under the `resolving-dart-defects` skill. Load and
