@@ -49,10 +49,22 @@ compatibility, and relevant abuse cases. Then inspect all changed production and
 their callers, and sibling paths sharing the invariant. Verify that tests assert behavior,
 would detect the original defect, and were not weakened.
 
-Run permitted targeted and repository-required checks. Do not trust green output alone; look
-for symptom suppression, shadow state, incomplete transitions, broad catches, silent fallback,
-resource leaks, races, unsafe casts, avoidable hot-path work, unrelated changes, and new trust
-boundary failures.
+Do not trust green output alone; look for symptom suppression, shadow state, incomplete
+transitions, broad catches, silent fallback, resource leaks, races, unsafe casts, avoidable
+hot-path work, unrelated changes, and new trust-boundary failures. If inspection proves a
+blocking defect, return `REWORK` without spending time on validation commands.
+
+Otherwise run this fail-fast sequence: check formatting of all changed Dart files without
+modifying them; run the repository analyzer once; then run the complete applicable test suite
+once. Stop at the first failure. Do not run targeted tests first when the complete suite
+includes them; use a separate test command only for tests excluded from that suite or to
+diagnose an observed failure.
+
+Run every `dart`, `flutter`, `fvm`, `melos`, build-runner, and analyzer command sequentially.
+Never dispatch toolchain commands in parallel or start one before the previous process exits.
+Use either CLI analysis or LSP/MCP analysis for a gate, never both.
+A timeout or cancellation fails the gate: ensure the old process exits, retry only after
+removing a known transient cause, and otherwise return `BLOCKED`.
 
 Return exactly one verdict:
 

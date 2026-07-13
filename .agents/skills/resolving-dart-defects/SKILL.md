@@ -64,16 +64,34 @@ criteria, repository constraints, allowed scope, and validation commands.
 The implementer must:
 
 1. Unless the dossier contains an approved substitute, add the smallest behavior-level
-   regression test and run it before production changes.
-2. Confirm the test fails for the expected defect. A test that passes immediately or fails
-   for an environmental/setup reason is not RED; return `BLOCKED` instead of patching code.
+   regression test before production changes.
+2. Format only the regression-test files, then run only those tests. Confirm they fail for the
+   expected defect. A test that passes or fails for compilation, environment, or setup is not
+   RED; correct the test and repeat without editing production code.
 3. For an approved substitute, record its exact procedure, environment/build identity, and
    raw pre-repair result before production changes. If the need for a waiver appears now,
    return `BLOCKED` for user approval.
 4. Repair the root cause at the owner of the invariant. Keep the existing architecture and
    public behavior unless the approved contract requires a change.
-5. Run the regression check, relevant existing tests, repository-required format/analyze
-   commands, and the full suite when practically executable. Report every command and result.
+5. Format every Dart file changed by the implementer.
+6. Run the repository analyzer once. If it reports a problem, fix it, format changed files,
+   and run the analyzer again. Do not continue until it is clean.
+7. Run the repository's complete applicable test suite once. Do not run the targeted tests
+   again first when the full suite includes them. Tests excluded from the default suite, such
+   as integration or platform tests, remain separate required commands.
+
+Run every `dart`, `flutter`, `fvm`, `melos`, build-runner, and analyzer command sequentially.
+Never place two toolchain commands in one parallel/multi-tool call, overlap them across agents,
+or start the next command before the previous process exits. Use one analyzer interface per
+gate; do not run CLI analysis and LSP/MCP analysis for the same gate.
+
+A hung, timed-out, or cancelled command does not pass its gate. Do not start another toolchain
+command until the old process has exited. Retry only after identifying and removing a transient
+cause such as a startup lock; otherwise return `BLOCKED`. Never switch analyzer interfaces to
+bypass a hung or failed gate.
+
+Validation is fail-fast. After any post-repair code change, resume at formatting, then analysis,
+then the complete suite. Do not spend time on later gates after an earlier gate fails.
 
 Tests must assert observable behavior, not private implementation details. Never weaken,
 delete, skip, or broadly rewrite a test merely to obtain green output.
@@ -108,6 +126,17 @@ Do **not** give it the selected repair option, patch plan, or implementer's reas
 reviewer first derives its own expected edge, failure, security, and concurrency checks; only
 then may it inspect the diff, changed tests, callers, and sibling paths.
 
+If inspection already proves a blocking defect, return `REWORK` without running expensive
+commands. Otherwise run these gates sequentially and stop at the first failure:
+
+1. Check formatting of all changed Dart files without modifying them.
+2. Run the repository analyzer once.
+3. Run the complete applicable test suite once.
+
+Do not run targeted tests before the complete suite when it includes them. Run a test command
+separately only when the complete command excludes it or when diagnosing an observed failure.
+The same no-parallel toolchain rule from Stage 2 applies to every reviewer command.
+
 The reviewer runs permitted checks and returns exactly one verdict:
 
 - `PASS`: acceptance criteria are proved and no blocking regression or vulnerability remains.
@@ -131,7 +160,10 @@ and residual limitations.
 | "A boolean guard is simplest" | Prove ownership, invariant, transitions, and failure recovery |
 | "I reviewed my own patch" | Self-review does not replace a fresh reviewer |
 | "We have no time" | Reduce scope, never remove evidence or security gates |
+| "Targeted tests are faster" | Use them for RED; after repair the complete suite replaces them |
 
-Red flags: production edits before RED or an approved substitute, a test that never failed, broad catches, silent
-defaults, unexplained force casts, duplicated state, only the reported caller patched despite
-a shared cause, unrelated refactoring, hidden command failures, or completion without `PASS`.
+Red flags: production edits before RED or an approved substitute, a test that never failed,
+parallel or overlapping toolchain commands, targeted GREEN followed by the same full suite,
+broad catches, silent defaults, unexplained force casts, duplicated state, only the reported
+caller patched despite a shared cause, unrelated refactoring, hidden command failures, or
+completion without `PASS`.
