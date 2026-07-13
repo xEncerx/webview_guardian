@@ -204,7 +204,7 @@ await adblockService.init(
 );
 ```
 
-`updateInterval` defaults to 24 hours. Set it to `null` if you do not want automatic periodic updates for that subscription.
+`updateInterval` defaults to `null`, so automatic periodic updates are opt-in. Set an interval to enable them for that subscription.
 
 To replace subscriptions after initialization:
 

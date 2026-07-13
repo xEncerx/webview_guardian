@@ -6,7 +6,7 @@ class FilterSubscription {
   /// Creates a [FilterSubscription] instance.
   const FilterSubscription({
     required this.url,
-    this.updateInterval = const Duration(hours: 24),
+    this.updateInterval,
   });
 
   /// The URL from which the filter list is fetched.
