@@ -1,5 +1,9 @@
 ## 0.3.0
 
+### Breaking changes
+
+- Remove the unused `id` and `lastEtag` named parameters from `FilterSubscription.copyWith`.
+
 ### Added
 
 - Support Adblock Plus `#$#` CSS injection rules globally and for domain include/exclude lists.

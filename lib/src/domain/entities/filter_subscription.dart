@@ -17,9 +17,7 @@ class FilterSubscription {
 
   /// Creates a copy of this [FilterSubscription] but with the given fields replaced with the new values.
   FilterSubscription copyWith({
-    String? id,
     String? url,
-    String? lastEtag,
     Duration? updateInterval,
   }) {
     return FilterSubscription(
