@@ -13,4 +13,7 @@ abstract class FilterRepository {
 
   /// Retrieves scriptlet injection rules applicable to the specified hostname.
   List<ScriptletRule> getScriptletRules(String hostname);
+
+  /// Retrieves custom CSS injection rules applicable to the specified hostname.
+  List<CssInjectRule> getCssInjectRules(String hostname);
 }

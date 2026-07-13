@@ -106,9 +106,7 @@ void main() {
     });
 
     test('should ignore comments starting with hash', () {
-      final bytes = _bytes(
-        '# This is a comment\n0.0.0.0 valid.com\n# 127.0.0.1 ignored.com',
-      );
+      final bytes = _bytes('# This is a comment\n0.0.0.0 valid.com\n# 127.0.0.1 ignored.com');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 1);
@@ -135,9 +133,7 @@ void main() {
     });
 
     test('should correctly parse both Windows CRLF and Unix LF line endings', () {
-      final bytes = _bytes(
-        '0.0.0.0 win.com\r\n127.0.0.1 unix.com\n0.0.0.0 mixed.com\r\n',
-      );
+      final bytes = _bytes('0.0.0.0 win.com\r\n127.0.0.1 unix.com\n0.0.0.0 mixed.com\r\n');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 3);
@@ -188,9 +184,7 @@ void main() {
     });
 
     test('should fast reject invalid garbage with spaces or slashes', () {
-      final bytes = _bytes(
-        'valid.com\nmy  domain.com\npath/example.com\nhttp://website.com',
-      );
+      final bytes = _bytes('valid.com\nmy  domain.com\npath/example.com\nhttp://website.com');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 1);
@@ -223,9 +217,7 @@ void main() {
     });
 
     test('should fast reject uBO procedural cosmetic rules', () {
-      final bytes = _bytes(
-        'example.com#?#div:-abp-has(a)\nwebsite.com#@?#tr:has-text(Promoted)',
-      );
+      final bytes = _bytes('example.com#?#div:-abp-has(a)\nwebsite.com#@?#tr:has-text(Promoted)');
       final rules = parser.parse(bytes).toList();
 
       expect(rules, isEmpty);
@@ -529,9 +521,43 @@ void main() {
         final rules = parser.parse(bytes).toList();
 
         expect(rules.length, 1);
+        expect(rules.first, isA<CssInjectRule>());
+        expect(rules.first, isNot(isA<CosmeticHideRule>()));
         final rule = rules.first as CssInjectRule;
-        expect(rule.domain, 'example.com');
+        expect(rule.includeDomains, ['example.com']);
         expect(rule.css, 'body { background: #000 !important; }');
+      });
+
+      test('should parse global and excluded CSS injection domains', () {
+        final rules = parser
+            .parse(
+              _bytes(
+                r'#$#body { overflow: auto !important; }'
+                '\n'
+                r'example.com,other.com,~sub.example.com#$#html { color: red; }',
+              ),
+            )
+            .toList();
+
+        final global = rules[0] as CssInjectRule;
+        expect(global.includeDomains, isNull);
+        expect(global.excludeDomains, isNull);
+
+        final scoped = rules[1] as CssInjectRule;
+        expect(scoped.includeDomains, ['example.com', 'other.com']);
+        expect(scoped.excludeDomains, ['sub.example.com']);
+      });
+
+      test('should preserve cosmetic and delimiter syntax inside injected CSS', () {
+        final rule =
+            parser
+                    .parse(
+                      _bytes(r'example.com#$#body:has(.notice) { content: "$$ and #$#"; }'),
+                    )
+                    .single
+                as CssInjectRule;
+
+        expect(rule.css, r'body:has(.notice) { content: "$$ and #$#"; }');
       });
     });
 
@@ -600,11 +626,7 @@ void main() {
 
       test('multiple domains with complex attribute selector', () {
         final rules = parser
-            .parse(
-              _bytes(
-                'ukrinform.de,ukrinform.es,ukrinform.fr##[style^="min-height: 280px;"]',
-              ),
-            )
+            .parse(_bytes('ukrinform.de,ukrinform.es,ukrinform.fr##[style^="min-height: 280px;"]'))
             .toList();
 
         expect(rules.length, 1);
@@ -669,11 +691,7 @@ void main() {
 
         expect(rules.length, 1);
         final rule = rules.first as CosmeticExceptionRule;
-        expect(rule.domains, [
-          'basinnow.com',
-          'e-jpccs.jp',
-          'oxfordlearnersdictionaries.com',
-        ]);
+        expect(rule.domains, ['basinnow.com', 'e-jpccs.jp', 'oxfordlearnersdictionaries.com']);
         expect(rule.selector, '#advertise');
       });
 
@@ -731,9 +749,7 @@ void main() {
       test('single domain #?# rule is dropped', () {
         final rules = parser
             .parse(
-              _bytes(
-                'argos.co.uk#?#[data-test^="component-slider-slide-"]:has-text(SPONSORED)',
-              ),
+              _bytes('argos.co.uk#?#[data-test^="component-slider-slide-"]:has-text(SPONSORED)'),
             )
             .toList();
 

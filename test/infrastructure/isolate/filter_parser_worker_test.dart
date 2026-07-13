@@ -73,9 +73,10 @@ void main() {
     setUp(() {
       tempDir = Directory.systemTemp.createTempSync('filter_parser_worker_test_');
       filterFile = File('${tempDir.path}/filters.txt')
-        ..writeAsStringSync('''
+        ..writeAsStringSync(r'''
 [Adblock Plus 2.0]
 banner.js
+first.example,second.example#$#body { color: red; }
 ''');
     });
 
@@ -110,6 +111,9 @@ banner.js
 
       expect(errors, isEmpty);
       expect(result, isA<Block>());
+      expect(engine.cssInjectRules['first.example'], hasLength(1));
+      expect(engine.cssInjectRules['second.example'], hasLength(1));
+      expect(engine.cssInjectRules, isNot(contains('*')));
 
       manager.dispose();
     });

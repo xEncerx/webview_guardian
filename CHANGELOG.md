@@ -1,3 +1,10 @@
+## 0.3.0
+
+### Added
+
+- Support Adblock Plus `#$#` CSS injection rules globally and for domain include/exclude lists.
+- Add `AdblockService.updateHttpOptions` to update filter download headers, proxy, and timeouts at runtime, with an optional immediate filter refresh.
+
 ## 0.2.1
 
 ### Fixed

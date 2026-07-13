@@ -75,10 +75,7 @@ class FilterRepositoryImpl implements FilterRepository {
       });
     }
 
-    return CosmeticRuleSet(
-      domainSpecificRules: domainSpecificRules,
-      genericRules: genericRules,
-    );
+    return CosmeticRuleSet(domainSpecificRules: domainSpecificRules, genericRules: genericRules);
   }
 
   @override
@@ -96,6 +93,28 @@ class FilterRepositoryImpl implements FilterRepository {
     }
 
     return result;
+  }
+
+  @override
+  List<CssInjectRule> getCssInjectRules(String hostname) {
+    final engine = _engineRef.current;
+    final seenCss = <String>{};
+    final result = <CssInjectRule>[];
+
+    for (final domain in _getCssDomainChain(hostname)) {
+      engine.cssInjectRules[domain]?.forEach((rule) {
+        if (!_isCssInjectRuleExcluded(hostname, rule.excludeDomains) && seenCss.add(rule.css)) {
+          result.add(rule);
+        }
+      });
+    }
+
+    return result;
+  }
+
+  Iterable<String> _getCssDomainChain(String hostname) sync* {
+    if (hostname.startsWith('www.')) yield hostname;
+    yield* _getDomainChain(hostname);
   }
 
   Iterable<String> _getDomainChain(String hostname) sync* {
@@ -124,6 +143,15 @@ class FilterRepositoryImpl implements FilterRepository {
       if (normalizedHost == normalizedDomain || normalizedHost.endsWith('.$normalizedDomain')) {
         return true;
       }
+    }
+    return false;
+  }
+
+  bool _isCssInjectRuleExcluded(String hostname, List<String>? excludeDomains) {
+    if (excludeDomains == null) return false;
+
+    for (final domain in excludeDomains) {
+      if (hostname == domain || hostname.endsWith('.$domain')) return true;
     }
     return false;
   }

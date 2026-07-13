@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
@@ -158,13 +159,36 @@ Some random text that is not a valid adblock list
 
       final userScripts = service.orchestrator!.buildUserScripts('unrelated-site.test');
 
-      expect(
-        userScripts.where((script) => script.source.contains('.global-ad')),
-        isNotEmpty,
-      );
+      expect(userScripts.where((script) => script.source.contains('.global-ad')), isNotEmpty);
       expect(
         userScripts.where((script) => script.source.contains('abortOnPropertyRead')),
         isNotEmpty,
+      );
+    });
+
+    test('should inject parsed CSS rules at document start', () async {
+      final cssFilterFile = File('${tempDir.path}/css_filter.txt')
+        ..writeAsStringSync(r'''
+[Adblock Plus 2.0]
+example.com#$#body { overflow: auto !important; }
+''');
+
+      await service.init(
+        subscriptions: [FilterSubscription(url: cssFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      final cssScripts = service.orchestrator!
+          .buildUserScripts('sub.example.com')
+          .where((script) => script.injectionTime == UserScriptInjectionTime.AT_DOCUMENT_START)
+          .toList();
+
+      expect(cssScripts, hasLength(1));
+      expect(cssScripts.single.source, contains('body { overflow: auto !important; }'));
+      expect(
+        cssScripts.single.source,
+        isNot(contains('body { overflow: auto !important; } { display: none !important; }')),
       );
     });
 
@@ -188,10 +212,7 @@ example.com##.sponsored
 
       final userScripts = service.orchestrator!.buildUserScripts('example.com');
 
-      expect(
-        userScripts.where((script) => script.source.contains('.sponsored')),
-        isEmpty,
-      );
+      expect(userScripts.where((script) => script.source.contains('.sponsored')), isEmpty);
     });
 
     test('should not crash on invalid filter file and should allow traffic (Resilience)', () async {
@@ -402,9 +423,7 @@ example.com##.sponsored
       expect(
         service.orchestrator!
             .buildUserScripts('example.com')
-            .where(
-              (script) => script.source.contains('.banner'),
-            ),
+            .where((script) => script.source.contains('.banner')),
         isNotEmpty,
       );
 
@@ -426,9 +445,7 @@ example.com##.sponsored
       expect(
         service.orchestrator!
             .buildUserScripts('example.com')
-            .where(
-              (script) => script.source.contains('.banner'),
-            ),
+            .where((script) => script.source.contains('.banner')),
         isEmpty,
       );
     });
@@ -487,11 +504,7 @@ example.com##.sponsored
         updateInterval: const Duration(seconds: 1),
       );
 
-      await service.init(
-        subscriptions: [sub],
-        storagePath: tempDir.path,
-        observer: observer,
-      );
+      await service.init(subscriptions: [sub], storagePath: tempDir.path, observer: observer);
 
       while (!service.isReady.value) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -554,10 +567,9 @@ example.com##.sponsored
 
       await Future<void>.delayed(Duration.zero);
 
-      expect(
-        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
-        ['initial.txt'],
-      );
+      expect(runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url), [
+        'initial.txt',
+      ]);
 
       runner.completeCurrent();
       await runner.waitForStartedCount(2);
@@ -566,10 +578,10 @@ example.com##.sponsored
       expect(await _isCompleted(firstUpdate), isFalse);
       expect(await _isCompleted(secondUpdate), isFalse);
 
-      expect(
-        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
-        ['initial.txt', 'second-update.txt'],
-      );
+      expect(runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url), [
+        'initial.txt',
+        'second-update.txt',
+      ]);
 
       runner.completeCurrent();
       await firstUpdate;
@@ -598,10 +610,10 @@ example.com##.sponsored
       await initFuture;
 
       expect(runner.startedStoragePaths, ['initial-storage', 'initial-storage']);
-      expect(
-        runner.startedHttpOptions.map((options) => options.headers['x-request']),
-        ['initial', 'initial'],
-      );
+      expect(runner.startedHttpOptions.map((options) => options.headers['x-request']), [
+        'initial',
+        'initial',
+      ]);
 
       runner.completeCurrent();
       await updateFuture;
@@ -665,10 +677,7 @@ example.com##.sponsored
         await initFuture;
         await runner.waitForIdle();
 
-        final refreshFuture = service.updateHttpOptions(
-          updatedOptions,
-          refreshFilters: true,
-        );
+        final refreshFuture = service.updateHttpOptions(updatedOptions, refreshFilters: true);
         await runner.waitForStartedCount(2);
 
         expect(runner.startedOperations, ['build:initial.txt', 'build:initial.txt']);
@@ -696,10 +705,7 @@ example.com##.sponsored
       final updateFuture = service.updateSubscriptions(const [
         FilterSubscription(url: 'pending-update.txt'),
       ]);
-      final refreshFuture = service.updateHttpOptions(
-        updatedOptions,
-        refreshFilters: true,
-      );
+      final refreshFuture = service.updateHttpOptions(updatedOptions, refreshFilters: true);
 
       await Future<void>.delayed(Duration.zero);
       expect(runner.startedOperations, ['build:initial.txt']);
@@ -742,10 +748,7 @@ example.com##.sponsored
       await runner.waitForStartedCount(2);
       await initFuture;
 
-      expect(
-        runner.startedOperations,
-        ['build:initial.txt', 'clear', 'build:pending-update.txt'],
-      );
+      expect(runner.startedOperations, ['build:initial.txt', 'clear', 'build:pending-update.txt']);
 
       expect(await _isCompleted(clearFuture), isTrue);
       expect(await _isCompleted(updateFuture), isFalse);
@@ -789,10 +792,7 @@ example.com##.sponsored
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
         throwsStateError,
       );
-      expect(
-        () => service.updateHttpOptions(const FilterHttpOptions()),
-        throwsStateError,
-      );
+      expect(() => service.updateHttpOptions(const FilterHttpOptions()), throwsStateError);
       expect(service.clearCache, throwsStateError);
 
       final initFuture = service.init(
@@ -815,10 +815,7 @@ example.com##.sponsored
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
         throwsStateError,
       );
-      expect(
-        () => service.updateHttpOptions(const FilterHttpOptions()),
-        throwsStateError,
-      );
+      expect(() => service.updateHttpOptions(const FilterHttpOptions()), throwsStateError);
       expect(service.clearCache, throwsStateError);
       service.dispose();
     });
@@ -855,10 +852,7 @@ example.com##.sponsored
 
       final initFuture = service.init(
         subscriptions: const [
-          FilterSubscription(
-            url: 'initial.txt',
-            updateInterval: Duration(milliseconds: 1),
-          ),
+          FilterSubscription(url: 'initial.txt', updateInterval: Duration(milliseconds: 1)),
         ],
         storagePath: tempDir.path,
       );

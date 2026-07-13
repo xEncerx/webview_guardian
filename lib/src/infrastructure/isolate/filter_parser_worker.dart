@@ -13,8 +13,8 @@ import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
-const _engineCacheFormatVersion = 3;
-const _filterParserVersion = 1;
+const _engineCacheFormatVersion = 4;
+const _filterParserVersion = 2;
 typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
 
 /// Arguments passed to the filter parser worker isolate on startup.
@@ -159,9 +159,7 @@ Future<void> _runPipeline({
           ),
         );
       } else {
-        observer.onError(
-          const CacheRestoreFailed('No fallback engine available to restore'),
-        );
+        observer.onError(const CacheRestoreFailed('No fallback engine available to restore'));
       }
     } catch (fallbackError, fallbackSt) {
       // If loading cached engine also fails, there's not much we can do. Report this critical failure back to main isolate.
@@ -273,10 +271,7 @@ bool _hasAllSubscriptionData({
 }
 
 /// Loads and validates the cached compiled filter engine bytes from disk.
-Future<Uint8List?> _loadCachedEngine(
-  FilterStorage storage, {
-  required String cacheIdentity,
-}) async {
+Future<Uint8List?> _loadCachedEngine(FilterStorage storage, {required String cacheIdentity}) async {
   final cached = await storage.loadEngineBytes(cacheIdentity: cacheIdentity);
   if (cached == null) return null;
   return cached;
@@ -285,10 +280,8 @@ Future<Uint8List?> _loadCachedEngine(
 Future<String> _buildEngineCacheIdentity({
   required List<FilterSubscription> subscriptions,
   required Map<String, CachedFilterListMetadata> metadataByUrl,
-}) async => buildEngineCacheIdentityForTesting(
-  subscriptions: subscriptions,
-  metadataByUrl: metadataByUrl,
-);
+}) async =>
+    buildEngineCacheIdentityForTesting(subscriptions: subscriptions, metadataByUrl: metadataByUrl);
 
 /// Builds the compiled-engine cache identity from subscription metadata only.
 @visibleForTesting
@@ -370,8 +363,10 @@ Future<_CompilerResult> _parseAndBuildEngine({
           scriptletRules.putIfAbsent(domain, () => []).add(rule);
         }
       case CssInjectRule():
-        final domain = rule.domain ?? _wildcardDomains[0];
-        cssInjectRules.putIfAbsent(domain, () => []).add(rule);
+        final domains = rule.domains ?? _wildcardDomains;
+        for (final domain in domains) {
+          cssInjectRules.putIfAbsent(domain, () => []).add(rule);
+        }
     }
   }
 

@@ -49,6 +49,8 @@ class AdblockPlusParser implements FilterListParser {
     // Regular expressions break Token Dispatch O(1) complexity. Dropped to maintain <1ms latency.
     if (line.startsWith('/') && line.endsWith('/') && line.length > 2) return null;
 
+    if (line.contains(r'#$#')) return _parseCssInject(line);
+
     // HTML filtering requires modifying response body before browser parsing,
     // which breaks streaming and is unsupported by Android's shouldInterceptRequest.
     if (line.contains(r'$$') || line.contains('##^') || line.contains(r'$@$')) {
@@ -106,9 +108,6 @@ class AdblockPlusParser implements FilterListParser {
     if (line.contains('#@#')) {
       return _parseCosmetic(line, '#@#', isException: true);
     }
-    if (line.contains(r'#$#')) {
-      return _parseCssInject(line);
-    }
     if (line.contains('##')) {
       return _parseCosmetic(line, '##', isException: false);
     }
@@ -125,36 +124,43 @@ class AdblockPlusParser implements FilterListParser {
 
     if (selector.isEmpty) return null;
 
-    List<String>? includeDomains;
-    List<String>? excludeDomains;
-    if (domainsPart.isNotEmpty) {
-      final includes = <String>[];
-      final excludes = <String>[];
-      for (final rawDomain in domainsPart.split(',')) {
-        final domain = rawDomain.trim();
-        if (domain.isEmpty) continue;
-        if (domain.startsWith('~')) {
-          final excludedDomain = domain.substring(1).trim();
-          if (excludedDomain.isNotEmpty) excludes.add(excludedDomain);
-        } else {
-          includes.add(domain);
-        }
-      }
-      if (includes.isNotEmpty) includeDomains = includes;
-      if (excludes.isNotEmpty) excludeDomains = excludes;
-    }
+    final domains = _parseCosmeticDomains(domainsPart);
 
     return isException
         ? CosmeticExceptionRule(
             selector: selector,
-            includeDomains: includeDomains,
-            excludeDomains: excludeDomains,
+            includeDomains: domains.includeDomains,
+            excludeDomains: domains.excludeDomains,
           )
         : CosmeticHideRule(
             selector: selector,
-            includeDomains: includeDomains,
-            excludeDomains: excludeDomains,
+            includeDomains: domains.includeDomains,
+            excludeDomains: domains.excludeDomains,
           );
+  }
+
+  ({List<String>? includeDomains, List<String>? excludeDomains}) _parseCosmeticDomains(
+    String domainsPart,
+  ) {
+    if (domainsPart.isEmpty) return (includeDomains: null, excludeDomains: null);
+
+    final includes = <String>[];
+    final excludes = <String>[];
+    for (final rawDomain in domainsPart.split(',')) {
+      final domain = rawDomain.trim();
+      if (domain.isEmpty) continue;
+      if (domain.startsWith('~')) {
+        final excludedDomain = domain.substring(1).trim();
+        if (excludedDomain.isNotEmpty) excludes.add(excludedDomain);
+      } else {
+        includes.add(domain);
+      }
+    }
+
+    return (
+      includeDomains: includes.isEmpty ? null : includes,
+      excludeDomains: excludes.isEmpty ? null : excludes,
+    );
   }
 
   FilterRule? _parseScriptlet(String line, String separator) {
@@ -191,10 +197,19 @@ class AdblockPlusParser implements FilterListParser {
   }
 
   FilterRule? _parseCssInject(String line) {
-    final parts = line.split(r'#$#');
-    if (parts.length != 2) return null;
+    final separatorIndex = line.indexOf(r'#$#');
+    if (separatorIndex == -1) return null;
 
-    return CssInjectRule(domain: parts[0].isNotEmpty ? parts[0] : null, css: parts[1]);
+    final css = line.substring(separatorIndex + 3).trim();
+    if (css.isEmpty) return null;
+
+    final domains = _parseCosmeticDomains(line.substring(0, separatorIndex));
+    return CssInjectRule(
+      css: css,
+      includeDomains: domains.includeDomains,
+      excludeDomains: domains.excludeDomains,
+      domain: domains.includeDomains?.length == 1 ? domains.includeDomains!.first : null,
+    );
   }
 
   FilterRule? _parseNetworkRule(String line) {

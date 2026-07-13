@@ -29,7 +29,12 @@ class InjectionOrchestrator {
     final cosmeticRuleSet = _repository.getCosmeticRuleSet(hostname);
     final cssRules = _cssRulesFor(cosmeticRuleSet);
     final observerRules = _observerRulesFor(cosmeticRuleSet);
-    final cssSource = _cosmeticCssScript.buildScriptFromRules(cssRules);
+    final cssSource = _cosmeticCssScript.buildScriptFromCss(
+      [
+        ...cssRules.map((rule) => '${rule.selector} { display: none !important; }'),
+        ..._repository.getCssInjectRules(hostname).map((rule) => rule.css),
+      ].join('\n'),
+    );
     final observerSource = _mutationObserverScript.buildScriptFromRules(observerRules);
     var cosmeticScriptBuilt = false;
 

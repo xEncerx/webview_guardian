@@ -243,9 +243,7 @@ void main() {
     test(
       'NetworkBlockRule serialized and deserialized accurately with empty collections and nulls',
       () {
-        const rule = NetworkBlockRule(
-          pattern: 'example.com',
-        );
+        const rule = NetworkBlockRule(pattern: 'example.com');
 
         final deserialized = serializer.testRuleRoundTrip(rule) as NetworkBlockRule;
 
@@ -336,10 +334,7 @@ void main() {
           scriptletName: 'prevent-popups',
           args: ['arg1', 'arg2', 'arg3', 'arg4', 'arg5'],
         );
-        const ruleEmptyArgs = ScriptletRule(
-          scriptletName: 'noop',
-          domains: ['example.com'],
-        );
+        const ruleEmptyArgs = ScriptletRule(scriptletName: 'noop', domains: ['example.com']);
 
         final deserialized = serializer.testRuleRoundTrip(rule) as ScriptletRule;
         final deserializedEmpty = serializer.testRuleRoundTrip(ruleEmptyArgs) as ScriptletRule;
@@ -353,19 +348,19 @@ void main() {
       },
     );
 
-    test(
-      'CssInjectRule serialized and deserialized accurately handling quotes, special chars, and null domain',
-      () {
-        const rule = CssInjectRule(
-          css: 'body { content: "fake!"; background: url("data:image/png;base64,..."); }',
-        );
+    test('CssInjectRule serialized and deserialized accurately with scoped domains', () {
+      const rule = CssInjectRule(
+        css: 'body { content: "fake!"; background: url("data:image/png;base64,..."); }',
+        includeDomains: ['example.com', 'other.com'],
+        excludeDomains: ['sub.example.com'],
+      );
 
-        final deserialized = serializer.testRuleRoundTrip(rule) as CssInjectRule;
+      final deserialized = serializer.testRuleRoundTrip(rule) as CssInjectRule;
 
-        expect(deserialized.css, rule.css);
-        expect(deserialized.domain, isNull);
-      },
-    );
+      expect(deserialized.css, rule.css);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
   });
 
   group('EngineSerializer Integration Tests', () {
@@ -869,10 +864,7 @@ void main() {
     });
 
     test('deserialization of empty buffer throws FormatException, not RangeError', () {
-      expect(
-        () => serializer.deserialize(Uint8List(0)),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => serializer.deserialize(Uint8List(0)), throwsA(isA<FormatException>()));
     });
 
     test('deserialization of truncated binary buffer throws FormatException', () {
@@ -892,10 +884,7 @@ void main() {
       final bytes = serializer.serialize(engine);
       final truncatedBytes = bytes.view(0, bytes.length - 10);
 
-      expect(
-        () => serializer.deserialize(truncatedBytes),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => serializer.deserialize(truncatedBytes), throwsA(isA<FormatException>()));
     });
 
     test(
@@ -903,10 +892,7 @@ void main() {
       () {
         final randomBytes = Uint8List.fromList(List.generate(100, (i) => i * 13 % 256));
 
-        expect(
-          () => serializer.deserialize(randomBytes),
-          throwsA(isA<Exception>()),
-        );
+        expect(() => serializer.deserialize(randomBytes), throwsA(isA<Exception>()));
       },
     );
 
