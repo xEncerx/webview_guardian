@@ -8,4 +8,7 @@ abstract class FilterListClient {
 
   /// Performs a HEAD request to check the metadata of a filter list.
   Future<FilterHeadResult> head(FilterSubscription subscription);
+
+  /// Disposes of any resources used by the client.
+  Future<void> dispose();
 }

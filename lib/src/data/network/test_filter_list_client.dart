@@ -28,4 +28,7 @@ class TestFilterListClient implements FilterListClient {
       etag: 'test_etag_${file.lastModifiedSync().millisecondsSinceEpoch}',
     );
   }
+
+  @override
+  Future<void> dispose() async {}
 }
