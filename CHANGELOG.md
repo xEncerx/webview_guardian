@@ -21,6 +21,7 @@
 - Reject `AdblockService.init()` immediately on unsupported platforms before starting filter jobs.
 - Close worker-owned HTTP clients and reject filter lists that exceed the configured size limit.
 - Recreate the native WebView when its `adblockService` identity changes so initial settings, scripts, and callbacks stay in sync.
+- Load the bundled scriptlet library during adblock initialization and resolve canonical and alias names with or without the `.js` suffix.
 
 ### Changed
 

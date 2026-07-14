@@ -172,6 +172,9 @@ class AdblockService {
       _storagePath = storagePath ?? (await getApplicationSupportDirectory()).path;
       if (_isDisposed) return;
 
+      await ScriptletLibrary.instance.load();
+      if (_isDisposed) return;
+
       _jobRunner ??= FilterIsolateManager(
         onEngineReady: _onEngineReady,
         onWorkerEvent: (event) => _observer?.onEvent(event),
