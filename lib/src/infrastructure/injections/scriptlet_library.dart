@@ -92,17 +92,17 @@ class ScriptletLibrary {
     final body = _scriptlets[name] ?? _scriptlets[alternateName];
     if (body == null) return null;
 
-    var injected = body;
-    for (var i = 0; i < args.length; i++) {
-      final arg = args[i];
+    final placeholderPattern = RegExp(r'\{\{(\d+)\}\}');
+    final substitutedIndexes = <int>{};
+    return body.replaceAllMapped(placeholderPattern, (match) {
+      final index = int.parse(match.group(1)!);
+      if (!substitutedIndexes.add(index)) return match.group(0)!;
+
+      final arg = index > 0 && index <= args.length ? args[index - 1] : '';
       // Basic escaping to prevent breaking the JS syntax if the arg contains quotes.
       // uBO scriptlets expect single-quoted string context: const target = '{{1}}';
       // So we escape single quotes and backslashes.
-      final escapedArg = arg.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      injected = injected.replaceAll('{{${i + 1}}}', escapedArg);
-    }
-
-    // Replace any remaining {{n}} with empty strings
-    return injected.replaceAll(RegExp(r'\{\{\d+\}\}'), '');
+      return arg.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+    });
   }
 }

@@ -49,17 +49,55 @@ const val = '{{1}}';
       expect(script, contains(r"const val = 'don\'t break\\it';"));
     });
 
-    test('should remove remaining {{n}} tokens if fewer arguments are provided', () {
+    test('preserves the sentinel after replacing a supplied argument', () {
+      const raw = '''
+/// remove-attr.js
+const token = '{{1}}';
+if (token === '' || token === '{{1}}') return;
+''';
+      ScriptletLibrary.instance.parseForTest(raw);
+
+      final script = ScriptletLibrary.instance.buildScript('remove-attr.js', [
+        'data-scriptlet-test',
+      ]);
+      expect(script, contains("const token = 'data-scriptlet-test';"));
+      expect(script, contains("token === '{{1}}'"));
+      expect(script, isNot(contains("token === 'data-scriptlet-test'")));
+    });
+
+    test('uses empty missing arguments only at substitution sites', () {
       const raw = '''
 /// test-missing.js
 const val1 = '{{1}}';
+if (val1 === '{{1}}') return;
 const val2 = '{{2}}';
+if (val2 === '{{2}}') return;
 ''';
       ScriptletLibrary.instance.parseForTest(raw);
 
       final script = ScriptletLibrary.instance.buildScript('test-missing.js', ['val1']);
       expect(script, contains("const val1 = 'val1';"));
+      expect(script, contains("val1 === '{{1}}'"));
       expect(script, contains("const val2 = '';"));
+      expect(script, contains("val2 === '{{2}}'"));
+    });
+
+    test('keeps marker-like argument text opaque', () {
+      const raw = '''
+/// test-marker-argument.js
+const first = '{{1}}';
+const second = '{{2}}';
+if (second === '{{2}}') return;
+''';
+      ScriptletLibrary.instance.parseForTest(raw);
+
+      final script = ScriptletLibrary.instance.buildScript('test-marker-argument.js', [
+        'literal {{2}}',
+        'second-value',
+      ]);
+      expect(script, contains("const first = 'literal {{2}}';"));
+      expect(script, contains("const second = 'second-value';"));
+      expect(script, contains("second === '{{2}}'"));
     });
 
     test('should return null if scriptlet does not exist', () {
@@ -290,7 +328,7 @@ const val2 = '{{2}}';
 
       final scriptletScript = userScripts[2];
       expect(scriptletScript.injectionTime, UserScriptInjectionTime.AT_DOCUMENT_START);
-      expect(scriptletScript.contentWorld, ContentWorld.DEFAULT_CLIENT);
+      expect(scriptletScript.contentWorld, ContentWorld.PAGE);
     });
 
     test('combines cosmetic hides and raw CSS injection without wrapping injected CSS', () {

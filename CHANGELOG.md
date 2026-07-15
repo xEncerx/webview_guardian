@@ -22,6 +22,8 @@
 - Close worker-owned HTTP clients and reject filter lists that exceed the configured size limit.
 - Recreate the native WebView when its `adblockService` identity changes so initial settings, scripts, and callbacks stay in sync.
 - Load the bundled scriptlet library during adblock initialization and resolve canonical and alias names with or without the `.js` suffix.
+- Preserve scriptlet placeholder sentinels during argument substitution so scriptlets do not return before executing.
+- Execute page-context scriptlets in the page content world instead of an isolated client world.
 
 ### Changed
 

@@ -99,7 +99,7 @@ class InjectionOrchestrator {
         InjectionTiming.atDocumentEnd => UserScriptInjectionTime.AT_DOCUMENT_END,
       },
       contentWorld: switch (script.world) {
-        InjectionWorld.page => ContentWorld.DEFAULT_CLIENT,
+        InjectionWorld.page => ContentWorld.PAGE,
         InjectionWorld.isolated => ContentWorld.world(name: 'Guardian'),
       },
     );
