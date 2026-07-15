@@ -18,7 +18,7 @@ void main() {
       testFilterFile = File('${tempDir.path}/test_filter.txt')
         ..writeAsStringSync(r'''
 [Adblock Plus 2.0]
-! Title: EasyList Test
+! Title: Synthetic adblock list
 
 ||ads.example.com^
 ||tracker.com^$script,third-party

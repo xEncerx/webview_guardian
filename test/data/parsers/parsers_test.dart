@@ -7,79 +7,22 @@ import 'package:webview_guardian/src/domain/domain.dart';
 
 Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
-const String easyListHeader = r'''
+const String adblockPlusHeader = r'''
 [Adblock Plus 2.0]
-! Version: 202604011753
-! Title: EasyList
-! Last modified: 01 Apr 2026 17:53 UTC
-! Expires: 4 days (update frequency)
-! Commit: 373d7f511258722e60233b4901db0c66cc11689c
-! *** easylist:template_header.txt ***
-! 
-! Please report any unblocked adverts or problems
-! in the forums (https://forums.lanik.us/)
-! or via e-mail (easylist@protonmail.com).
-! 
-! Homepage: https://easylist.to/
-! Licence: https://easylist.to/pages/licence.html
-! GitHub issues: https://github.com/easylist/easylist/issues
-! GitHub pull requests: https://github.com/easylist/easylist/pulls
-! 
-! -----------------------General advert blocking filters-----------------------!
-! *** easylist:easylist/easylist_general_block.txt ***
-&rb=&uuid=$third-party
-&subaffid=%$subdocument,third-party
--ad-manager/$~stylesheet
--ad-sidebar.$image
--ad.jpg.pagespeed.$image
--ads-manager/$domain=~wordpress.org
--ads/assets/$script,domain=~web-ads.org
--assets/ads.$~script
+! Title: Synthetic adblock list
+! Version: 1
+||ads.example.com^
+@@||allowed.example.com^
 ''';
 const String hostsHeader = '''
-# AdAway default blocklist
-# Blocking mobile ad providers and some analytics providers
-#
-# Project home page:
-# https://github.com/AdAway/adaway.github.io/
-#
-# Fetch the latest version of this file:
-# https://raw.githubusercontent.com/AdAway/adaway.github.io/master/hosts.txt
-#
-# License:
-# CC Attribution 3.0 (http://creativecommons.org/licenses/by/3.0/)
-#
-# Contributions by:
-# Kicelo, Dominik Schuermann.
-# Further changes and contributors maintained in the commit history at
-# https://github.com/AdAway/adaway.github.io/commits/master
-#
-# Contribute:
-# Create an issue at https://github.com/AdAway/adaway.github.io/issues
-#
-
-127.0.0.1  localhost
-::1  localhost
-
-# [163.com]
-127.0.0.1 analytics.163.com
+# Synthetic hosts list
+127.0.0.1 localhost
+0.0.0.0 ads.example.com
 ''';
 const String domainListHeader = '''
-# Title: HaGeZi's Pro DNS Blocklist
-# Description: Big broom - Cleans the Internet and protects your privacy! Blocks Ads, Affiliate, Tracking, Metrics, Telemetry, Phishing, Malware, Scam, Fake, Crytojacking and other "Crap".
-# Homepage: https://github.com/hagezi/dns-blocklists
-# License: https://github.com/hagezi/dns-blocklists/blob/main/LICENSE
-# Issues: https://github.com/hagezi/dns-blocklists/issues
-# Disclaimer: https://github.com/hagezi/dns-blocklists/blob/main/README.md#disclaimer
-# Expires: 1 day
-# Last modified: 01 Apr 2026 10:23 UTC
-# Version: 2026.0401.1023.52
-# Syntax: Domains (including possible subdomains)
-# Number of entries: 390349
-#
-0.beer
-0.club
-0.fashion
+# Synthetic domain list
+ads.example.com
+tracker.example.org
 ''';
 
 void main() {
@@ -786,21 +729,21 @@ void main() {
   });
 
   group('FilterListParserFactory', () {
-    test('should resolve AdblockPlusParser when given realEasyListHeader', () {
-      final header = _bytes(easyListHeader);
+    test('should resolve AdblockPlusParser when given an adblock header', () {
+      final header = _bytes(adblockPlusHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 
       expect(parser, isA<AdblockPlusParser>());
     });
 
-    test('should resolve HostsParser when given realHostsHeader', () {
+    test('should resolve HostsParser when given a hosts header', () {
       final header = _bytes(hostsHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 
       expect(parser, isA<HostsParser>());
     });
 
-    test('should resolve DomainListParser when given realDomainListHeader', () {
+    test('should resolve DomainListParser when given a domain list header', () {
       final header = _bytes(domainListHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 
