@@ -25,11 +25,13 @@
 - Load the bundled scriptlet library during adblock initialization and resolve canonical and alias names with or without the `.js` suffix.
 - Preserve scriptlet placeholder sentinels during argument substitution so scriptlets do not return before executing.
 - Execute page-context scriptlets in the page content world instead of an isolated client world.
+- Fix document-start behavior for inline-script aborting, class removal, WebRTC disabling, SmartAdServer, AdFly, and upManager scriptlets.
 
 ### Changed
 
 - Make periodic filter updates opt-in by defaulting `FilterSubscription.updateInterval` to `null`.
 - Require every internal `FilterListClient` implementation to dispose its resources asynchronously.
+- Replace the previously bundled uBO scriptlets with independent clean-room implementations to avoid incompatible license terms.
 
 ## 0.2.1
 

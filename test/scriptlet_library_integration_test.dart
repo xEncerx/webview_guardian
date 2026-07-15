@@ -88,7 +88,7 @@ example.com#%#//scriptlet('ra.js', 'alias-explicit')
     if (finalScriptlet == null) fail('Bundled final scriptlet was not loaded.');
     expect(
       finalScriptlet.trim(),
-      endsWith("window.addEventListener('beforeunload', removeCookie);\n})();"),
+      endsWith('})();'),
     );
   });
 }
