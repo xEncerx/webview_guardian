@@ -4,6 +4,7 @@
 
 - Remove the unused `id` and `lastEtag` named parameters from `FilterSubscription.copyWith`.
 - Change `WebView.initialUrl` from `String` to `Uri` so callers provide a parsed initial URL.
+- Limit filter-list proxies to `http://` URLs and reject invalid or unsupported proxy configurations.
 
 ### Added
 

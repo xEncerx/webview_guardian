@@ -81,21 +81,17 @@ class HttpFilterListClient implements FilterListClient {
 
   void _configureProxy(String proxyUrl) {
     final uri = Uri.tryParse(proxyUrl);
-    if (uri == null) return;
+    if (uri == null || uri.scheme.toLowerCase() != 'http' || uri.host.isEmpty) {
+      throw ArgumentError.value(proxyUrl, 'proxy', 'Only valid http:// proxy URLs are supported');
+    }
 
     final host = uri.host;
-    final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+    final port = uri.hasPort ? uri.port : 80;
+    if (port < 1 || port > 65535) {
+      throw ArgumentError.value(proxyUrl, 'proxy', 'Proxy port must be between 1 and 65535');
+    }
 
-    final proxyType = switch (uri.scheme.toLowerCase()) {
-      'socks4' => 'SOCKS4',
-      'socks5' => 'SOCKS5',
-      'socks' => 'SOCKS5',
-      'http' => 'HTTP',
-      'https' => 'HTTPS',
-      _ => 'DIRECT',
-    };
-
-    _client.findProxy = (url) => '$proxyType $host:$port';
+    _client.findProxy = (url) => 'PROXY $host:$port';
 
     if (uri.userInfo.isNotEmpty) {
       final parts = uri.userInfo.split(':');

@@ -21,6 +21,8 @@ final class FilterHttpOptions {
   final Map<String, String> headers;
 
   /// The proxy URL to use for the request.
+  ///
+  /// Only `http://` proxy URLs are supported.
   final String? proxy;
 
   /// The maximum number of bytes accepted from one filter-list response.

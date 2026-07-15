@@ -348,7 +348,7 @@ await adblockService.init(
     headers: {
       'User-Agent': 'MyApp/1.0',
     },
-    proxy: 'http://proxy.example.com:8080', // supports `http://`, `https://`, `socks4://`, and `socks5://` URLs
+    proxy: 'http://proxy.example.com:8080', // only `http://` URLs are supported
   ),
 );
 ```
@@ -363,7 +363,7 @@ await adblockService.updateHttpOptions(
     headers: {
       'Authorization': 'Bearer refreshed-token',
     },
-    proxy: 'socks5://127.0.0.1:1080',
+    proxy: 'http://127.0.0.1:8080',
   ),
 );
 ```
@@ -377,7 +377,7 @@ await adblockService.updateHttpOptions(
     headers: {
       'Authorization': 'Bearer refreshed-token',
     },
-    proxy: 'socks5://127.0.0.1:1080',
+    proxy: 'http://127.0.0.1:8080',
   ),
   refreshFilters: true,
 );
