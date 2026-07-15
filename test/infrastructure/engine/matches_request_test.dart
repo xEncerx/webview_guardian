@@ -328,7 +328,7 @@ void main() {
       expect(rule.matchesRequest(_req('https://example.com/api/adservices')), isFalse);
     });
 
-    test('should handle multiple consecutive wildcards safely (performance edge case)', () {
+    test('should handle multiple consecutive wildcards safely', () {
       final rule = _block('||tracker.com/ad***banner*');
 
       expect(rule.matchesRequest(_req('https://tracker.com/ad/123/banner.jpg')), isTrue);
