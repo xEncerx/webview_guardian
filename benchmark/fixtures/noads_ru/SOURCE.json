@@ -1,0 +1,49 @@
+{
+  "source": "https://github.com/Zalexanninev15/NoADS_RU",
+  "commit": "55cf7c89f7564ad23cba86bec33516cd4ac87cb2",
+  "commitDate": "2026-07-07T14:26:54Z",
+  "snapshotDate": "2026-07-14",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "ads_list.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/main/ads_list.txt",
+      "pinnedUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/55cf7c89f7564ad23cba86bec33516cd4ac87cb2/ads_list.txt",
+      "gitBlob": "04676744d693fe54f2d21148e1362422dd791a3d",
+      "bytes": 949787,
+      "sha256": "07c42e2ae09ecc06bac3d627be201081600767c155c64aebaa3b1f1b3c5c9675"
+    },
+    {
+      "path": "ads_list_extended.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/main/ads_list_extended.txt",
+      "pinnedUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/55cf7c89f7564ad23cba86bec33516cd4ac87cb2/ads_list_extended.txt",
+      "gitBlob": "74ee464b1bad6368453616f1d788aa079a5f5430",
+      "bytes": 3186487,
+      "sha256": "30c2d02fb8b36650c1585c4a1f4f11eb9a1a46b001897692f31012bb58447f6b"
+    },
+    {
+      "path": "ads_list_extended_plus.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/main/ads_list_extended_plus.txt",
+      "pinnedUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/55cf7c89f7564ad23cba86bec33516cd4ac87cb2/ads_list_extended_plus.txt",
+      "gitBlob": "5f53bf91f343157ed9ee912445188b0138c452fd",
+      "bytes": 6717157,
+      "sha256": "9482bc91fc294e8d65fb9dd04624d0359844eb39a87cd26c5fd35dd3e9db6753"
+    },
+    {
+      "path": "blocker.txt",
+      "sourceUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/main/hosts/blocker.txt",
+      "pinnedUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/55cf7c89f7564ad23cba86bec33516cd4ac87cb2/hosts/blocker.txt",
+      "gitBlob": "cc2743e293dd30bddea2b3e70c028c976b4b9576",
+      "bytes": 5229547,
+      "sha256": "c01afc6734fe727ff893e4bcc0cf0c3efb03b8d4b8040a3c519337ee42206138"
+    },
+    {
+      "path": "LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/main/LICENSE",
+      "pinnedUrl": "https://raw.githubusercontent.com/Zalexanninev15/NoADS_RU/55cf7c89f7564ad23cba86bec33516cd4ac87cb2/LICENSE",
+      "gitBlob": "6dfdbf53ac796433910f5474ed769ddb28f15e55",
+      "bytes": 1076,
+      "sha256": "6100676cd93ccf82ad50e7c20432e524c5f53488be1655aad7494258b0f1ff48"
+    }
+  ]
+}

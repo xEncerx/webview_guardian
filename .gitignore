@@ -30,6 +30,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local benchmark results
+/benchmark/results/*
+!/benchmark/results/.gitkeep
+
 # Generated files
 *.g.dart
 *.gr.dart
