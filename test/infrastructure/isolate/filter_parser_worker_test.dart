@@ -68,7 +68,7 @@ void main() {
       expect(missingIdentity, isNot(presentIdentity));
     });
 
-    test('does not reuse compiled cache identity from parser version 2', () async {
+    test('does not reuse compiled cache identity from engine format 4', () async {
       const subscription = FilterSubscription(
         url: 'https://filters.test/list.txt',
         updateInterval: Duration(hours: 6),
@@ -80,7 +80,7 @@ void main() {
             utf8.encode(
               jsonEncode({
                 'engineCacheFormatVersion': 4,
-                'filterParserVersion': 2,
+                'filterParserVersion': 3,
                 'subscriptions': [
                   {
                     'url': subscription.url,
@@ -163,6 +163,64 @@ first.example,second.example#$#body { color: red; }
       expect(engine.cssInjectRules, isNot(contains('*')));
 
       manager.dispose();
+    });
+
+    test('keeps only trie-complete hostname rules out of dispatch', () async {
+      filterFile.writeAsStringSync(r'''
+[Adblock Plus 2.0]
+||a.co^$script,third-party,important,domain=site.test
+||B.co^
+||c.co
+||d.co^$match-case
+||e_f^
+''');
+      final completer = Completer<CompiledFilterEngine>();
+      final errors = <WebViewError>[];
+      final manager = FilterIsolateManager(
+        onEngineReady: (engine, _, _, _) => completer.complete(engine),
+        onWorkerEvent: (_) {},
+        onWorkerError: errors.add,
+      );
+
+      try {
+        await manager
+            .runBuildJob(
+              subscriptions: [FilterSubscription(url: filterFile.path)],
+              httpOptions: const FilterHttpOptions(),
+              storagePath: tempDir.path,
+              useTestClient: true,
+            )
+            .timeout(const Duration(seconds: 5));
+
+        final engine = await completer.future.timeout(const Duration(seconds: 5));
+        final matcher = FilterMatcher(FilterEngineRef(engine));
+        const completeRule = NetworkBlockRule(
+          pattern: '||a.co^',
+          resourceTypes: {ResourceType.script},
+          isThirdPartyOnly: true,
+          isImportant: true,
+          includeDomains: {'site.test'},
+        );
+        final unsafeRules = <FilterRule>{
+          const NetworkBlockRule(pattern: '||B.co^'),
+          const NetworkBlockRule(pattern: '||c.co'),
+          const NetworkBlockRule(pattern: '||d.co^', isMatchCase: true),
+          const NetworkBlockRule(pattern: '||e_f^'),
+        };
+
+        expect(errors, isEmpty);
+        expect(engine.trieRules, contains(completeRule));
+        expect(
+          engine.tokenDispatchTable.values.expand((rules) => rules),
+          isNot(contains(completeRule)),
+        );
+        expect(engine.fallbackRules, isNot(contains(completeRule)));
+        expect(engine.fallbackRules, containsAll(unsafeRules));
+        expect(matcher.matchNetworkRequest(_request('https://a.co/script.js')), isA<Block>());
+        expect(matcher.matchNetworkRequest(_request('https://b.co/script.js')), isA<Block>());
+      } finally {
+        manager.dispose();
+      }
     });
   });
 

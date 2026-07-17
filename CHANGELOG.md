@@ -33,6 +33,10 @@
 - Require every internal `FilterListClient` implementation to dispose its resources asynchronously.
 - Replace the previously bundled uBO scriptlets with independent clean-room implementations to avoid incompatible license terms.
 
+### Performance
+
+- Keep trie-complete `||host^` network rules out of token dispatch and fallback matching to reduce compiled engine size and fallback lookup work.
+
 ## 0.2.1
 
 ### Fixed

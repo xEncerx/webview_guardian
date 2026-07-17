@@ -13,7 +13,7 @@ import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
-const _engineCacheFormatVersion = 4;
+const _engineCacheFormatVersion = 5;
 const _filterParserVersion = 3;
 typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
 typedef _SubscriptionFetchResult = ({bool changed, CachedFilterListMetadata? metadata});
@@ -382,13 +382,19 @@ Future<_CompilerResult> _parseAndBuildEngine({
     }
   }
 
-  // 3. Compile Token Dispatch Table for network rules
-  final dispatchResult = TokenDispatchCompiler.compile(networkRules);
-
-  // 4. Compile Hostname Trie for ||domain^ rules
+  // 3. Compile the hostname trie and retain non-complete candidates for token dispatch.
   final trieCompiler = HostnameTrieCompiler();
-  networkRules.forEach(trieCompiler.tryAddRule);
+  final dispatchRules = <FilterRule>[];
+  for (final rule in networkRules) {
+    final isTrieCandidate = trieCompiler.tryAddRule(rule);
+    if (!isTrieCandidate || !HostnameTrieCompiler.isTrieComplete(rule)) {
+      dispatchRules.add(rule);
+    }
+  }
   final trieResult = trieCompiler.build();
+
+  // 4. Compile Token Dispatch Table for rules not fully covered by the trie.
+  final dispatchResult = TokenDispatchCompiler.compile(dispatchRules);
 
   // 5. Build final compiled engine instance
   final compiledEngine = CompiledFilterEngine(
