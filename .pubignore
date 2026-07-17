@@ -1,0 +1,32 @@
+# Repository and development tooling
+/.agents/
+/.github/
+/.idea/
+/.opencode/
+/.vscode/
+/AGENTS.md
+/opencode.json
+*.iml
+
+# Benchmarks are maintained in the repository, not distributed to consumers.
+/benchmark/
+
+# Generated files and local caches
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/build/
+**/coverage/
+**/doc/api/
+**/flutter/ephemeral/
+/pubspec.lock
+*.log
+
+# Local platform configuration and credentials
+**/.gradle/
+**/local.properties
+**/key.properties
+**/*.jks
+**/*.keystore
+
+# Operating system files
+.DS_Store

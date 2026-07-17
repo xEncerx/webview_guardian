@@ -28,7 +28,14 @@ The package is built on top of [`flutter_inappwebview`](https://github.com/pichi
 
 ## Installation
 
-The package is not published on pub.dev yet. Add it from GitHub:
+Add `webview_guardian` to your dependencies:
+
+```yaml
+dependencies:
+  webview_guardian: ^0.3.0
+```
+
+<p align="center">OR</p>
 
 ```yaml
 dependencies:
@@ -43,6 +50,9 @@ Then fetch dependencies:
 ```sh
 flutter pub get
 ```
+
+For platform requirements and setup, follow the
+[`flutter_inappwebview` installation documentation](https://inappwebview.dev/docs/intro/).
 
 ## Quick Start
 
