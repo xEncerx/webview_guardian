@@ -84,12 +84,15 @@ class AdblockService {
   Stream<int> get ruleCountStream => _ruleCountController.stream;
 
   /// The active filter repository, if ready.
+  @internal
   FilterRepository? get repository => _repository;
 
   /// The active injection orchestrator, if ready.
+  @internal
   InjectionOrchestrator? get orchestrator => _orchestrator;
 
   /// The traffic interceptor to be used in WebView instances, if ready.
+  @internal
   TrafficInterceptor? get trafficInterceptor => _trafficInterceptor;
 
   /// The current list of filter subscriptions.

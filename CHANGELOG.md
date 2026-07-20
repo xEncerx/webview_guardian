@@ -32,6 +32,7 @@
 - Make periodic filter updates opt-in by defaulting `FilterSubscription.updateInterval` to `null`.
 - Require every internal `FilterListClient` implementation to dispose its resources asynchronously.
 - Replace the previously bundled uBO scriptlets with independent clean-room implementations to avoid incompatible license terms.
+- Mark the `AdblockService` repository, injection orchestrator, and traffic interceptor accessors as package-internal.
 
 ### Performance
 
