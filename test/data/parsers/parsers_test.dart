@@ -7,7 +7,7 @@ import 'package:webview_guardian/src/domain/domain.dart';
 
 Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
-const String adblockPlusHeader = r'''
+const String adblockPlusHeader = '''
 [Adblock Plus 2.0]
 ! Title: Synthetic adblock list
 ! Version: 1
