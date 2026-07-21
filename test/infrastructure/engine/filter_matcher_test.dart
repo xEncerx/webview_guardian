@@ -581,5 +581,4 @@ void main() {
       expect(result, isA<Block>());
     });
   });
-
 }

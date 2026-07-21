@@ -267,5 +267,4 @@ void main() {
       expect(compiled.buffer.isNotEmpty, isTrue);
     });
   });
-
 }
