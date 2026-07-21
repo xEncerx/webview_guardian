@@ -56,63 +56,58 @@ For platform requirements and setup, follow the
 
 ## Quick Start
 
-Create one `AdblockService`, initialize it once, and pass it to `WebView`.
+Create one `AdblockService` at the application composition root, initialize it once, and pass the
+same instance to every `WebView`. Individual pages should not create or dispose the service.
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:webview_guardian/webview_guardian.dart';
 
-class BrowserPage extends StatefulWidget {
-  const BrowserPage({super.key});
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-  @override
-  State<BrowserPage> createState() => _BrowserPageState();
+  final adblockService = AdblockService();
+  await adblockService.init(
+    subscriptions: const [
+      FilterSubscription(
+        url: 'https://easylist.to/easylist/easylist.txt',
+      ),
+    ],
+  );
+
+  runApp(BrowserApp(adblockService: adblockService));
 }
 
-class _BrowserPageState extends State<BrowserPage> {
-  final AdblockService _adblockService = AdblockService();
-  late final Future<void> _initAdblock;
+class BrowserApp extends StatelessWidget {
+  const BrowserApp({required this.adblockService, super.key});
 
-  @override
-  void initState() {
-    super.initState();
-    _initAdblock = _adblockService.init(
-      subscriptions: const [
-        FilterSubscription(
-          url: 'https://easylist.to/easylist/easylist.txt',
-        ),
-      ],
-    );
-  }
-
-  @override
-  void dispose() {
-    _adblockService.dispose();
-    super.dispose();
-  }
+  final AdblockService adblockService;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _initAdblock,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return MaterialApp(
+      home: BrowserPage(adblockService: adblockService),
+    );
+  }
+}
 
-        if (snapshot.hasError) {
-          return Center(child: Text('Adblock init failed: ${snapshot.error}'));
-        }
+class BrowserPage extends StatelessWidget {
+  const BrowserPage({required this.adblockService, super.key});
 
-        return WebView(
-          initialUrl: Uri.parse('https://example.com'),
-          adblockService: _adblockService,
-        );
-      },
+  final AdblockService adblockService;
+
+  @override
+  Widget build(BuildContext context) {
+    return WebView(
+      initialUrl: Uri.parse('https://example.com'),
+      adblockService: adblockService,
     );
   }
 }
 ```
+
+The service normally lives for the whole application process. If your application-level owner is
+torn down explicitly, such as in a test or add-to-app host, call `adblockService.dispose()` there.
 
 `AdblockService.init()` must complete before you call `updateSubscriptions()` or `clearCache()`.
 
@@ -267,9 +262,6 @@ Useful `AdblockService` members:
 | `isReady`            | `ValueNotifier<bool>` that becomes `true` when the engine is ready. |
 | `ruleCount`          | Current number of loaded rules.                                     |
 | `ruleCountStream`    | Emits rule count changes after rebuilds.                            |
-| `repository`         | Active `FilterRepository`, available after initialization.          |
-| `orchestrator`       | Active injection orchestrator, available after initialization.      |
-| `trafficInterceptor` | Active traffic interceptor, available after initialization.         |
 
 Toggle blocking:
 
