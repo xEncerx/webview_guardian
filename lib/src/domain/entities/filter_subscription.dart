@@ -6,7 +6,7 @@ class FilterSubscription {
   /// Creates a [FilterSubscription] instance.
   const FilterSubscription({
     required this.url,
-    this.updateInterval = const Duration(hours: 24),
+    this.updateInterval,
   });
 
   /// The URL from which the filter list is fetched.
@@ -17,9 +17,7 @@ class FilterSubscription {
 
   /// Creates a copy of this [FilterSubscription] but with the given fields replaced with the new values.
   FilterSubscription copyWith({
-    String? id,
     String? url,
-    String? lastEtag,
     Duration? updateInterval,
   }) {
     return FilterSubscription(

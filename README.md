@@ -28,7 +28,14 @@ The package is built on top of [`flutter_inappwebview`](https://github.com/pichi
 
 ## Installation
 
-The package is not published on pub.dev yet. Add it from GitHub:
+Add `webview_guardian` to your dependencies:
+
+```yaml
+dependencies:
+  webview_guardian: ^0.3.0
+```
+
+<p align="center">OR</p>
 
 ```yaml
 dependencies:
@@ -43,6 +50,9 @@ Then fetch dependencies:
 ```sh
 flutter pub get
 ```
+
+For platform requirements and setup, follow the
+[`flutter_inappwebview` installation documentation](https://inappwebview.dev/docs/intro/).
 
 ## Quick Start
 
@@ -95,7 +105,7 @@ class _BrowserPageState extends State<BrowserPage> {
         }
 
         return WebView(
-          initialUrl: 'https://example.com',
+          initialUrl: Uri.parse('https://example.com'),
           adblockService: _adblockService,
         );
       },
@@ -112,7 +122,7 @@ Ad blocking is optional. If you do not pass `adblockService`, the widget behaves
 
 ```dart
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   onWebViewCreated: (controller) async {
     final url = await controller.getUrl();
     debugPrint('Current URL: $url');
@@ -204,7 +214,7 @@ await adblockService.init(
 );
 ```
 
-`updateInterval` defaults to 24 hours. Set it to `null` if you do not want automatic periodic updates for that subscription.
+`updateInterval` defaults to `null`, so automatic periodic updates are opt-in. Set an interval to enable them for that subscription.
 
 To replace subscriptions after initialization:
 
@@ -343,15 +353,45 @@ await adblockService.init(
   httpOptions: const FilterHttpOptions(
     connectTimeout: Duration(seconds: 15),
     receiveTimeout: Duration(seconds: 60),
+    maxFilterListBytes: 32 * 1024 * 1024,
+    maxConcurrentDownloads: 4,
     headers: {
       'User-Agent': 'MyApp/1.0',
     },
-    proxy: 'http://proxy.example.com:8080',
+    proxy: 'http://proxy.example.com:8080', // only `http://` URLs are supported
   ),
 );
 ```
 
-`proxy` supports `http://`, `https://`, `socks4://`, and `socks5://` URLs.
+Filter-list responses default to a 32 MiB limit, with at most four subscription downloads processed concurrently.
+
+You can also update these options after initialization. By default, new options are used by the next scheduled or manual subscription update:
+
+```dart
+await adblockService.updateHttpOptions(
+  const FilterHttpOptions(
+    headers: {
+      'Authorization': 'Bearer refreshed-token',
+    },
+    proxy: 'http://127.0.0.1:8080',
+  ),
+);
+```
+
+Pass `refreshFilters: true` to immediately refetch the current subscriptions
+with the new options:
+
+```dart
+await adblockService.updateHttpOptions(
+  const FilterHttpOptions(
+    headers: {
+      'Authorization': 'Bearer refreshed-token',
+    },
+    proxy: 'http://127.0.0.1:8080',
+  ),
+  refreshFilters: true,
+);
+```
 
 ## WebView API
 
@@ -359,7 +399,7 @@ await adblockService.init(
 
 | Parameter                | Description                                                   |
 | ------------------------ | ------------------------------------------------------------- |
-| `initialUrl`             | URL loaded when the widget is created.                        |
+| `initialUrl`             | `Uri` loaded when the widget is created.                      |
 | `adblockService`         | Optional `AdblockService`. Omit it to disable ad blocking.    |
 | `enablePullToRefresh`    | Enables pull-to-refresh where supported. Defaults to `false`. |
 | `pullToRefreshSettings`  | Colors and size for pull-to-refresh.                          |
@@ -391,7 +431,7 @@ Example with navigation controls:
 WebViewController? controller;
 
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   adblockService: adblockService,
   onWebViewCreated: (createdController) {
     controller = createdController;
@@ -407,7 +447,7 @@ WebView(
 
 ```dart
 WebView(
-  initialUrl: 'https://example.com',
+  initialUrl: Uri.parse('https://example.com'),
   enablePullToRefresh: true,
   pullToRefreshSettings: const WebViewPullToRefreshSettings(
     color: Colors.blue,

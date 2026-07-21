@@ -13,9 +13,10 @@ import 'package:webview_guardian/src/domain/domain.dart';
 import 'package:webview_guardian/src/infrastructure/infrastructure.dart';
 
 const _wildcardDomains = ['*'];
-const _engineCacheFormatVersion = 3;
-const _filterParserVersion = 1;
+const _engineCacheFormatVersion = 5;
+const _filterParserVersion = 3;
 typedef _FetchResult = ({bool filtersChanged, Map<String, CachedFilterListMetadata> metadataByUrl});
+typedef _SubscriptionFetchResult = ({bool changed, CachedFilterListMetadata? metadata});
 
 /// Arguments passed to the filter parser worker isolate on startup.
 typedef WorkerInitArgs = ({SendPort sendPort, String? storagePath, bool useTestClient});
@@ -159,9 +160,7 @@ Future<void> _runPipeline({
           ),
         );
       } else {
-        observer.onError(
-          const CacheRestoreFailed('No fallback engine available to restore'),
-        );
+        observer.onError(const CacheRestoreFailed('No fallback engine available to restore'));
       }
     } catch (fallbackError, fallbackSt) {
       // If loading cached engine also fails, there's not much we can do. Report this critical failure back to main isolate.
@@ -184,55 +183,66 @@ Future<_FetchResult> _checkAndFetchFilters({
 }) async {
   final client = useTestClient ? TestFilterListClient() : HttpFilterListClient(httpOptions);
 
-  final futures = subscriptions.map((sub) async {
-    observer.onEvent(FilterListFetchStarted(sub.url));
+  try {
+    Future<_SubscriptionFetchResult> fetchSubscription(FilterSubscription sub) async {
+      observer.onEvent(FilterListFetchStarted(sub.url));
 
-    try {
-      final cachedMetadata = await _loadCachedMetadataForMatchingHead(
-        client: client,
-        storage: storage,
-        subscription: sub,
-      );
-      if (cachedMetadata != null) {
-        observer.onEvent(FilterCacheMatch(sub.url));
+      try {
+        final cachedMetadata = await _loadCachedMetadataForMatchingHead(
+          client: client,
+          storage: storage,
+          subscription: sub,
+        );
+        if (cachedMetadata != null) {
+          observer.onEvent(FilterCacheMatch(sub.url));
+          return (changed: false, metadata: cachedMetadata);
+        }
+      } catch (_) {
+        // Some hosts/CDNs do not support HEAD reliably; GET remains the authoritative fetch.
+      }
+
+      try {
+        // Parse list and save to cache if changes occurred
+        final response = await client.fetch(sub);
+        await storage.saveFilterList(
+          url: sub.url,
+          etag: response.etag ?? DateTime.now().microsecondsSinceEpoch.toString(),
+          bytes: response.bytes,
+        );
+        final updatedMetadata = await storage.loadFilterListMetadata(sub.url);
+        return (changed: true, metadata: updatedMetadata);
+      } catch (e, st) {
+        observer.onError(FilterFetchFailed('Failed: ${sub.url}', cause: '$e\n$st'));
+        final cachedMetadata = await storage.loadFilterListMetadata(sub.url);
         return (changed: false, metadata: cachedMetadata);
       }
-    } catch (_) {
-      // Some hosts/CDNs do not support HEAD reliably; GET remains the authoritative fetch.
     }
 
-    try {
-      // Parse list and save to cache if changes occurred
-      final response = await client.fetch(sub);
-      await storage.saveFilterList(
-        url: sub.url,
-        etag: response.etag ?? DateTime.now().microsecondsSinceEpoch.toString(),
-        bytes: response.bytes,
+    final results = <_SubscriptionFetchResult>[];
+    for (var start = 0; start < subscriptions.length; start += httpOptions.maxConcurrentDownloads) {
+      results.addAll(
+        await Future.wait(
+          subscriptions.skip(start).take(httpOptions.maxConcurrentDownloads).map(fetchSubscription),
+        ),
       );
-      final updatedMetadata = await storage.loadFilterListMetadata(sub.url);
-      return (changed: true, metadata: updatedMetadata);
-    } catch (e, st) {
-      observer.onError(FilterFetchFailed('Failed: ${sub.url}', cause: '$e\n$st'));
-      final cachedMetadata = await storage.loadFilterListMetadata(sub.url);
-      return (changed: false, metadata: cachedMetadata);
     }
-  });
+    final metadataByUrl = <String, CachedFilterListMetadata>{};
+    for (var i = 0; i < subscriptions.length; i++) {
+      final metadata = results[i].metadata;
+      if (metadata != null) metadataByUrl[subscriptions[i].url] = metadata;
+    }
 
-  final results = await Future.wait(futures);
-  final metadataByUrl = <String, CachedFilterListMetadata>{};
-  for (var i = 0; i < subscriptions.length; i++) {
-    final metadata = results[i].metadata;
-    if (metadata != null) metadataByUrl[subscriptions[i].url] = metadata;
+    final orphansDeleted = await storage.cleanupOrphanedFilterLists(
+      subscriptions.map((s) => s.url).toList(),
+    );
+
+    return (
+      filtersChanged: orphansDeleted || results.any((result) => result.changed),
+      metadataByUrl: metadataByUrl,
+    );
+  } finally {
+    await client.dispose();
   }
-
-  final orphansDeleted = await storage.cleanupOrphanedFilterLists(
-    subscriptions.map((s) => s.url).toList(),
-  );
-
-  return (
-    filtersChanged: orphansDeleted || results.any((result) => result.changed),
-    metadataByUrl: metadataByUrl,
-  );
 }
 
 Future<CachedFilterListMetadata?> _loadCachedMetadataForMatchingHead({
@@ -273,10 +283,7 @@ bool _hasAllSubscriptionData({
 }
 
 /// Loads and validates the cached compiled filter engine bytes from disk.
-Future<Uint8List?> _loadCachedEngine(
-  FilterStorage storage, {
-  required String cacheIdentity,
-}) async {
+Future<Uint8List?> _loadCachedEngine(FilterStorage storage, {required String cacheIdentity}) async {
   final cached = await storage.loadEngineBytes(cacheIdentity: cacheIdentity);
   if (cached == null) return null;
   return cached;
@@ -285,10 +292,8 @@ Future<Uint8List?> _loadCachedEngine(
 Future<String> _buildEngineCacheIdentity({
   required List<FilterSubscription> subscriptions,
   required Map<String, CachedFilterListMetadata> metadataByUrl,
-}) async => buildEngineCacheIdentityForTesting(
-  subscriptions: subscriptions,
-  metadataByUrl: metadataByUrl,
-);
+}) async =>
+    buildEngineCacheIdentityForTesting(subscriptions: subscriptions, metadataByUrl: metadataByUrl);
 
 /// Builds the compiled-engine cache identity from subscription metadata only.
 @visibleForTesting
@@ -370,18 +375,26 @@ Future<_CompilerResult> _parseAndBuildEngine({
           scriptletRules.putIfAbsent(domain, () => []).add(rule);
         }
       case CssInjectRule():
-        final domain = rule.domain ?? _wildcardDomains[0];
-        cssInjectRules.putIfAbsent(domain, () => []).add(rule);
+        final domains = rule.domains ?? _wildcardDomains;
+        for (final domain in domains) {
+          cssInjectRules.putIfAbsent(domain, () => []).add(rule);
+        }
     }
   }
 
-  // 3. Compile Token Dispatch Table for network rules
-  final dispatchResult = TokenDispatchCompiler.compile(networkRules);
-
-  // 4. Compile Hostname Trie for ||domain^ rules
+  // 3. Compile the hostname trie and retain non-complete candidates for token dispatch.
   final trieCompiler = HostnameTrieCompiler();
-  networkRules.forEach(trieCompiler.tryAddRule);
+  final dispatchRules = <FilterRule>[];
+  for (final rule in networkRules) {
+    final isTrieCandidate = trieCompiler.tryAddRule(rule);
+    if (!isTrieCandidate || !HostnameTrieCompiler.isTrieComplete(rule)) {
+      dispatchRules.add(rule);
+    }
+  }
   final trieResult = trieCompiler.build();
+
+  // 4. Compile Token Dispatch Table for rules not fully covered by the trie.
+  final dispatchResult = TokenDispatchCompiler.compile(dispatchRules);
 
   // 5. Build final compiled engine instance
   final compiledEngine = CompiledFilterEngine(

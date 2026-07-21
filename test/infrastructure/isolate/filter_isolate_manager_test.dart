@@ -18,7 +18,7 @@ void main() {
       testFilterFile = File('${tempDir.path}/test_filter.txt')
         ..writeAsStringSync(r'''
 [Adblock Plus 2.0]
-! Title: EasyList Test
+! Title: Synthetic adblock list
 
 ||ads.example.com^
 ||tracker.com^$script,third-party
@@ -165,7 +165,7 @@ example.com##.banner-ad
       await expectLater(activeJob, throwsA(isA<FilterIsolateJobCancelled>()));
     });
 
-    test('runBuildJob should complete after terminal cache restore failure', () async {
+    test('runBuildJob should fail after terminal cache restore failure', () async {
       final errors = <WebViewError>[];
       final invalidStoragePath = File('${tempDir.path}/not_a_directory')..writeAsStringSync('x');
       final manager = FilterIsolateManager(
@@ -183,7 +183,7 @@ example.com##.banner-ad
               useTestClient: true,
             )
             .timeout(const Duration(seconds: 5)),
-        completes,
+        throwsA(isA<CacheRestoreFailed>()),
       );
 
       expect(errors.whereType<CacheRestoreFailed>(), isNotEmpty);

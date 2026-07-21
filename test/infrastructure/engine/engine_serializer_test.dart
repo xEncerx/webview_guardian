@@ -243,9 +243,7 @@ void main() {
     test(
       'NetworkBlockRule serialized and deserialized accurately with empty collections and nulls',
       () {
-        const rule = NetworkBlockRule(
-          pattern: 'example.com',
-        );
+        const rule = NetworkBlockRule(pattern: 'example.com');
 
         final deserialized = serializer.testRuleRoundTrip(rule) as NetworkBlockRule;
 
@@ -336,10 +334,7 @@ void main() {
           scriptletName: 'prevent-popups',
           args: ['arg1', 'arg2', 'arg3', 'arg4', 'arg5'],
         );
-        const ruleEmptyArgs = ScriptletRule(
-          scriptletName: 'noop',
-          domains: ['example.com'],
-        );
+        const ruleEmptyArgs = ScriptletRule(scriptletName: 'noop', domains: ['example.com']);
 
         final deserialized = serializer.testRuleRoundTrip(rule) as ScriptletRule;
         final deserializedEmpty = serializer.testRuleRoundTrip(ruleEmptyArgs) as ScriptletRule;
@@ -353,19 +348,19 @@ void main() {
       },
     );
 
-    test(
-      'CssInjectRule serialized and deserialized accurately handling quotes, special chars, and null domain',
-      () {
-        const rule = CssInjectRule(
-          css: 'body { content: "fake!"; background: url("data:image/png;base64,..."); }',
-        );
+    test('CssInjectRule serialized and deserialized accurately with scoped domains', () {
+      const rule = CssInjectRule(
+        css: 'body { content: "fake!"; background: url("data:image/png;base64,..."); }',
+        includeDomains: ['example.com', 'other.com'],
+        excludeDomains: ['sub.example.com'],
+      );
 
-        final deserialized = serializer.testRuleRoundTrip(rule) as CssInjectRule;
+      final deserialized = serializer.testRuleRoundTrip(rule) as CssInjectRule;
 
-        expect(deserialized.css, rule.css);
-        expect(deserialized.domain, isNull);
-      },
-    );
+      expect(deserialized.css, rule.css);
+      expect(deserialized.includeDomains, rule.includeDomains);
+      expect(deserialized.excludeDomains, rule.excludeDomains);
+    });
   });
 
   group('EngineSerializer Integration Tests', () {
@@ -748,119 +743,6 @@ void main() {
     );
   });
 
-  group('Performance & Stress Tests', () {
-    late EngineSerializer serializer;
-
-    setUp(() {
-      serializer = EngineSerializer();
-    });
-
-    CompiledFilterEngine buildEngine(int totalRules) {
-      final networkCount = (totalRules * 0.7).toInt();
-      final cosmeticCount = (totalRules * 0.2).toInt();
-      final fallbackCount = totalRules - networkCount - cosmeticCount;
-
-      final networkRules = List.generate(
-        networkCount,
-        (i) => NetworkBlockRule(pattern: 'pattern$i.com'),
-      );
-      final cosmeticHideRules = List.generate(
-        cosmeticCount,
-        (i) => CosmeticHideRule(selector: '.ad$i'),
-      );
-      final cosmeticMap = <String, List<CosmeticHideRule>>{};
-      for (var i = 0; i < cosmeticHideRules.length; i++) {
-        final domain = 'domain${i % 2000}.com';
-        cosmeticMap.putIfAbsent(domain, () => []).add(cosmeticHideRules[i]);
-      }
-      final fallbackRules = List.generate(
-        fallbackCount,
-        (i) => NetworkBlockRule(pattern: '*ad$i*'),
-      );
-
-      return CompiledFilterEngine(
-        totalRules: totalRules,
-        trieBuffer: Uint32List(1000),
-        trieRules: networkRules,
-        tokenDispatchTable: {
-          for (var i = 0; i < networkRules.length; i += 10) i: [networkRules[i]],
-        },
-        fallbackRules: fallbackRules.toSet(),
-        cosmeticHideRules: cosmeticMap,
-        cosmeticExceptionRules: {},
-        scriptletRules: {},
-        cssInjectRules: {},
-      );
-    }
-
-    test('serializes 100,000 rules within 500ms', () {
-      final engine = buildEngine(100_000);
-
-      final stopwatch = Stopwatch()..start();
-      serializer.serialize(engine);
-      stopwatch.stop();
-
-      expect(stopwatch.elapsedMilliseconds, lessThan(500));
-    });
-
-    test('serializes and deserializes 100,000 rules full cycle within 1000ms', () {
-      final engine = buildEngine(100_000);
-
-      final stopwatch = Stopwatch()..start();
-      final bytes = serializer.serialize(engine);
-      serializer.deserialize(bytes);
-      stopwatch.stop();
-
-      expect(stopwatch.elapsedMilliseconds, lessThan(1000));
-    });
-
-    test('binary output size for 100,000 rules is below 3MB', () {
-      final engine = buildEngine(100_000);
-
-      final bytes = serializer.serialize(engine);
-      final sizeInMb = bytes.lengthInBytes / (1024 * 1024);
-      expect(sizeInMb, lessThan(3));
-    });
-
-    test('repeated serialization/deserialization cycles do not degrade or bloat size', () {
-      const rule = NetworkBlockRule(pattern: 'repeat');
-      var engine = CompiledFilterEngine(
-        totalRules: 0,
-        trieBuffer: Uint32List(0),
-        trieRules: [rule],
-        tokenDispatchTable: {},
-        fallbackRules: {},
-        cosmeticHideRules: {},
-        cosmeticExceptionRules: {},
-        scriptletRules: {},
-        cssInjectRules: {},
-      );
-
-      var initialSize = -1;
-      for (var i = 0; i < 10; i++) {
-        final bytes = serializer.serialize(engine);
-        if (initialSize == -1) {
-          initialSize = bytes.length;
-        } else {
-          expect(bytes.length, initialSize);
-        }
-        engine = serializer.deserialize(bytes);
-      }
-    });
-
-    test('deserialization of an existing binary acts quickly under 100ms mimicking cold start', () {
-      final engine = buildEngine(100_000);
-
-      final bytes = serializer.serialize(engine);
-
-      final stopwatch = Stopwatch()..start();
-      serializer.deserialize(bytes);
-      stopwatch.stop();
-
-      expect(stopwatch.elapsedMilliseconds, lessThan(100));
-    });
-  });
-
   group('Edge Cases & Corrupted Data Tests', () {
     late EngineSerializer serializer;
 
@@ -869,10 +751,7 @@ void main() {
     });
 
     test('deserialization of empty buffer throws FormatException, not RangeError', () {
-      expect(
-        () => serializer.deserialize(Uint8List(0)),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => serializer.deserialize(Uint8List(0)), throwsA(isA<FormatException>()));
     });
 
     test('deserialization of truncated binary buffer throws FormatException', () {
@@ -892,10 +771,7 @@ void main() {
       final bytes = serializer.serialize(engine);
       final truncatedBytes = bytes.view(0, bytes.length - 10);
 
-      expect(
-        () => serializer.deserialize(truncatedBytes),
-        throwsA(isA<FormatException>()),
-      );
+      expect(() => serializer.deserialize(truncatedBytes), throwsA(isA<FormatException>()));
     });
 
     test(
@@ -903,10 +779,7 @@ void main() {
       () {
         final randomBytes = Uint8List.fromList(List.generate(100, (i) => i * 13 % 256));
 
-        expect(
-          () => serializer.deserialize(randomBytes),
-          throwsA(isA<Exception>()),
-        );
+        expect(() => serializer.deserialize(randomBytes), throwsA(isA<Exception>()));
       },
     );
 

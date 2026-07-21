@@ -7,79 +7,22 @@ import 'package:webview_guardian/src/domain/domain.dart';
 
 Uint8List _bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
-const String easyListHeader = r'''
+const String adblockPlusHeader = '''
 [Adblock Plus 2.0]
-! Version: 202604011753
-! Title: EasyList
-! Last modified: 01 Apr 2026 17:53 UTC
-! Expires: 4 days (update frequency)
-! Commit: 373d7f511258722e60233b4901db0c66cc11689c
-! *** easylist:template_header.txt ***
-! 
-! Please report any unblocked adverts or problems
-! in the forums (https://forums.lanik.us/)
-! or via e-mail (easylist@protonmail.com).
-! 
-! Homepage: https://easylist.to/
-! Licence: https://easylist.to/pages/licence.html
-! GitHub issues: https://github.com/easylist/easylist/issues
-! GitHub pull requests: https://github.com/easylist/easylist/pulls
-! 
-! -----------------------General advert blocking filters-----------------------!
-! *** easylist:easylist/easylist_general_block.txt ***
-&rb=&uuid=$third-party
-&subaffid=%$subdocument,third-party
--ad-manager/$~stylesheet
--ad-sidebar.$image
--ad.jpg.pagespeed.$image
--ads-manager/$domain=~wordpress.org
--ads/assets/$script,domain=~web-ads.org
--assets/ads.$~script
+! Title: Synthetic adblock list
+! Version: 1
+||ads.example.com^
+@@||allowed.example.com^
 ''';
 const String hostsHeader = '''
-# AdAway default blocklist
-# Blocking mobile ad providers and some analytics providers
-#
-# Project home page:
-# https://github.com/AdAway/adaway.github.io/
-#
-# Fetch the latest version of this file:
-# https://raw.githubusercontent.com/AdAway/adaway.github.io/master/hosts.txt
-#
-# License:
-# CC Attribution 3.0 (http://creativecommons.org/licenses/by/3.0/)
-#
-# Contributions by:
-# Kicelo, Dominik Schuermann.
-# Further changes and contributors maintained in the commit history at
-# https://github.com/AdAway/adaway.github.io/commits/master
-#
-# Contribute:
-# Create an issue at https://github.com/AdAway/adaway.github.io/issues
-#
-
-127.0.0.1  localhost
-::1  localhost
-
-# [163.com]
-127.0.0.1 analytics.163.com
+# Synthetic hosts list
+127.0.0.1 localhost
+0.0.0.0 ads.example.com
 ''';
 const String domainListHeader = '''
-# Title: HaGeZi's Pro DNS Blocklist
-# Description: Big broom - Cleans the Internet and protects your privacy! Blocks Ads, Affiliate, Tracking, Metrics, Telemetry, Phishing, Malware, Scam, Fake, Crytojacking and other "Crap".
-# Homepage: https://github.com/hagezi/dns-blocklists
-# License: https://github.com/hagezi/dns-blocklists/blob/main/LICENSE
-# Issues: https://github.com/hagezi/dns-blocklists/issues
-# Disclaimer: https://github.com/hagezi/dns-blocklists/blob/main/README.md#disclaimer
-# Expires: 1 day
-# Last modified: 01 Apr 2026 10:23 UTC
-# Version: 2026.0401.1023.52
-# Syntax: Domains (including possible subdomains)
-# Number of entries: 390349
-#
-0.beer
-0.club
-0.fashion
+# Synthetic domain list
+ads.example.com
+tracker.example.org
 ''';
 
 void main() {
@@ -106,9 +49,7 @@ void main() {
     });
 
     test('should ignore comments starting with hash', () {
-      final bytes = _bytes(
-        '# This is a comment\n0.0.0.0 valid.com\n# 127.0.0.1 ignored.com',
-      );
+      final bytes = _bytes('# This is a comment\n0.0.0.0 valid.com\n# 127.0.0.1 ignored.com');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 1);
@@ -135,9 +76,7 @@ void main() {
     });
 
     test('should correctly parse both Windows CRLF and Unix LF line endings', () {
-      final bytes = _bytes(
-        '0.0.0.0 win.com\r\n127.0.0.1 unix.com\n0.0.0.0 mixed.com\r\n',
-      );
+      final bytes = _bytes('0.0.0.0 win.com\r\n127.0.0.1 unix.com\n0.0.0.0 mixed.com\r\n');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 3);
@@ -188,9 +127,7 @@ void main() {
     });
 
     test('should fast reject invalid garbage with spaces or slashes', () {
-      final bytes = _bytes(
-        'valid.com\nmy  domain.com\npath/example.com\nhttp://website.com',
-      );
+      final bytes = _bytes('valid.com\nmy  domain.com\npath/example.com\nhttp://website.com');
       final rules = parser.parse(bytes).toList();
 
       expect(rules.length, 1);
@@ -223,9 +160,7 @@ void main() {
     });
 
     test('should fast reject uBO procedural cosmetic rules', () {
-      final bytes = _bytes(
-        'example.com#?#div:-abp-has(a)\nwebsite.com#@?#tr:has-text(Promoted)',
-      );
+      final bytes = _bytes('example.com#?#div:-abp-has(a)\nwebsite.com#@?#tr:has-text(Promoted)');
       final rules = parser.parse(bytes).toList();
 
       expect(rules, isEmpty);
@@ -428,6 +363,25 @@ void main() {
     });
 
     group('Edge cases and specific modifiers', () {
+      test('should drop unknown positive network modifiers but preserve unknown negatives', () {
+        final rules = parser
+            .parse(
+              _bytes(
+                r'||unknown-positive.com^$popup'
+                '\n'
+                r'||mixed-positive.com^$script,popup'
+                '\n'
+                r'@@||unknown-positive-exception.com^$popup'
+                '\n'
+                r'||unknown-negative.com^$~popup',
+              ),
+            )
+            .toList();
+
+        expect(rules, hasLength(1));
+        expect((rules.single as NetworkBlockRule).pattern, '||unknown-negative.com^');
+      });
+
       test('should completely drop rules with badfilter modifier', () {
         final bytes = _bytes('||example.com^\$script,badfilter\n@@||test.com^\$badfilter');
         final rules = parser.parse(bytes).toList();
@@ -503,7 +457,7 @@ void main() {
 
       test('should drop unsupported cosmetic and scriptlet exception syntaxes', () {
         final bytes = _bytes(
-          "example.com#@\$#body { background: #000 !important; }\n"
+          'example.com#@\$#body { background: #000 !important; }\n'
           "example.com#@%#//scriptlet('abort-on-property-read', 'ads')",
         );
         final rules = parser.parse(bytes).toList();
@@ -529,9 +483,43 @@ void main() {
         final rules = parser.parse(bytes).toList();
 
         expect(rules.length, 1);
+        expect(rules.first, isA<CssInjectRule>());
+        expect(rules.first, isNot(isA<CosmeticHideRule>()));
         final rule = rules.first as CssInjectRule;
-        expect(rule.domain, 'example.com');
+        expect(rule.includeDomains, ['example.com']);
         expect(rule.css, 'body { background: #000 !important; }');
+      });
+
+      test('should parse global and excluded CSS injection domains', () {
+        final rules = parser
+            .parse(
+              _bytes(
+                r'#$#body { overflow: auto !important; }'
+                '\n'
+                r'example.com,other.com,~sub.example.com#$#html { color: red; }',
+              ),
+            )
+            .toList();
+
+        final global = rules[0] as CssInjectRule;
+        expect(global.includeDomains, isNull);
+        expect(global.excludeDomains, isNull);
+
+        final scoped = rules[1] as CssInjectRule;
+        expect(scoped.includeDomains, ['example.com', 'other.com']);
+        expect(scoped.excludeDomains, ['sub.example.com']);
+      });
+
+      test('should preserve cosmetic and delimiter syntax inside injected CSS', () {
+        final rule =
+            parser
+                    .parse(
+                      _bytes(r'example.com#$#body:has(.notice) { content: "$$ and #$#"; }'),
+                    )
+                    .single
+                as CssInjectRule;
+
+        expect(rule.css, r'body:has(.notice) { content: "$$ and #$#"; }');
       });
     });
 
@@ -600,11 +588,7 @@ void main() {
 
       test('multiple domains with complex attribute selector', () {
         final rules = parser
-            .parse(
-              _bytes(
-                'ukrinform.de,ukrinform.es,ukrinform.fr##[style^="min-height: 280px;"]',
-              ),
-            )
+            .parse(_bytes('ukrinform.de,ukrinform.es,ukrinform.fr##[style^="min-height: 280px;"]'))
             .toList();
 
         expect(rules.length, 1);
@@ -669,11 +653,7 @@ void main() {
 
         expect(rules.length, 1);
         final rule = rules.first as CosmeticExceptionRule;
-        expect(rule.domains, [
-          'basinnow.com',
-          'e-jpccs.jp',
-          'oxfordlearnersdictionaries.com',
-        ]);
+        expect(rule.domains, ['basinnow.com', 'e-jpccs.jp', 'oxfordlearnersdictionaries.com']);
         expect(rule.selector, '#advertise');
       });
 
@@ -731,9 +711,7 @@ void main() {
       test('single domain #?# rule is dropped', () {
         final rules = parser
             .parse(
-              _bytes(
-                'argos.co.uk#?#[data-test^="component-slider-slide-"]:has-text(SPONSORED)',
-              ),
+              _bytes('argos.co.uk#?#[data-test^="component-slider-slide-"]:has-text(SPONSORED)'),
             )
             .toList();
 
@@ -751,21 +729,21 @@ void main() {
   });
 
   group('FilterListParserFactory', () {
-    test('should resolve AdblockPlusParser when given realEasyListHeader', () {
-      final header = _bytes(easyListHeader);
+    test('should resolve AdblockPlusParser when given an adblock header', () {
+      final header = _bytes(adblockPlusHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 
       expect(parser, isA<AdblockPlusParser>());
     });
 
-    test('should resolve HostsParser when given realHostsHeader', () {
+    test('should resolve HostsParser when given a hosts header', () {
       final header = _bytes(hostsHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 
       expect(parser, isA<HostsParser>());
     });
 
-    test('should resolve DomainListParser when given realDomainListHeader', () {
+    test('should resolve DomainListParser when given a domain list header', () {
       final header = _bytes(domainListHeader);
       final dynamic parser = FilterListParserFactory.resolve(header);
 

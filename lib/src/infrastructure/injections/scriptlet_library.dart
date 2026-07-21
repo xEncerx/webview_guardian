@@ -31,13 +31,12 @@ class ScriptletLibrary {
   /// Loads the scriptlet library from assets. Should be called during app initialization.
   Future<void> load() async {
     if (_isLoaded) return;
-    try {
-      final rawStr = await rootBundle.loadString('packages/webview_guardian/assets/scriptlets.js');
-      _parse(rawStr);
-      _isLoaded = true;
-    } on Exception {
-      // Ignore if not found, we just won't inject scriptlets.
-    }
+    final rawStr = await rootBundle.loadString(
+      'packages/webview_guardian/assets/scriptlets.js',
+      cache: false,
+    );
+    _parse(rawStr);
+    _isLoaded = true;
   }
 
   void _parse(String raw) {
@@ -47,6 +46,11 @@ class ScriptletLibrary {
     final buffer = StringBuffer();
 
     for (final line in lines) {
+      if (line.startsWith('// These lines below are skipped by the resource parser.') ||
+          line.startsWith('// <<<<')) {
+        break;
+      }
+
       if (line.startsWith('/// ')) {
         final name = line.substring(4).trim();
         if (name.startsWith('alias ')) {
@@ -65,9 +69,7 @@ class ScriptletLibrary {
           aliases.clear();
           buffer.clear();
         }
-      } else if (currentName != null &&
-          !line.startsWith('// <<<<') &&
-          !line.startsWith('// >>>>')) {
+      } else if (currentName != null && !line.startsWith('// >>>>')) {
         buffer.writeln(line);
       }
     }
@@ -86,20 +88,21 @@ class ScriptletLibrary {
   String? buildScript(String name, List<String> args) {
     if (!_isLoaded) return null;
 
-    final body = _scriptlets[name];
+    final alternateName = name.endsWith('.js') ? name.substring(0, name.length - 3) : '$name.js';
+    final body = _scriptlets[name] ?? _scriptlets[alternateName];
     if (body == null) return null;
 
-    var injected = body;
-    for (var i = 0; i < args.length; i++) {
-      final arg = args[i];
+    final placeholderPattern = RegExp(r'\{\{(\d+)\}\}');
+    final substitutedIndexes = <int>{};
+    return body.replaceAllMapped(placeholderPattern, (match) {
+      final index = int.parse(match.group(1)!);
+      if (!substitutedIndexes.add(index)) return match.group(0)!;
+
+      final arg = index > 0 && index <= args.length ? args[index - 1] : '';
       // Basic escaping to prevent breaking the JS syntax if the arg contains quotes.
       // uBO scriptlets expect single-quoted string context: const target = '{{1}}';
       // So we escape single quotes and backslashes.
-      final escapedArg = arg.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      injected = injected.replaceAll('{{${i + 1}}}', escapedArg);
-    }
-
-    // Replace any remaining {{n}} with empty strings
-    return injected.replaceAll(RegExp(r'\{\{\d+\}\}'), '');
+      return arg.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+    });
   }
 }

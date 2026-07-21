@@ -23,7 +23,14 @@ class CosmeticCSSScript implements InjectionScript {
     if (rules.isEmpty) return null;
 
     final cssRules = rules.map((r) => '${r.selector} { display: none !important; }').join(r'\n');
-    final cssJson = jsonEncode(cssRules);
+    return buildScriptFromCss(cssRules);
+  }
+
+  /// Builds a style injection script from ready-to-inject CSS.
+  String? buildScriptFromCss(String css) {
+    if (css.isEmpty) return null;
+
+    final cssJson = jsonEncode(css);
 
     // Create a style element and inject it into the head
     return '''

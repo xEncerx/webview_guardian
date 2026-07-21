@@ -30,6 +30,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local benchmark results
+/benchmark/results/*
+!/benchmark/results/.gitkeep
+
 # Generated files
 *.g.dart
 *.gr.dart
@@ -41,4 +45,7 @@ migrate_working_dir/
 graphify-out/
 
 # OpenCode local configuration
-.opencode/
+.opencode/*
+!.opencode/agents/
+!.opencode/agents/dart-defect-implementer.md
+!.opencode/agents/dart-defect-reviewer.md

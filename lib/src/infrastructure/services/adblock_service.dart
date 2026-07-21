@@ -84,16 +84,22 @@ class AdblockService {
   Stream<int> get ruleCountStream => _ruleCountController.stream;
 
   /// The active filter repository, if ready.
+  @internal
   FilterRepository? get repository => _repository;
 
   /// The active injection orchestrator, if ready.
+  @internal
   InjectionOrchestrator? get orchestrator => _orchestrator;
 
   /// The traffic interceptor to be used in WebView instances, if ready.
+  @internal
   TrafficInterceptor? get trafficInterceptor => _trafficInterceptor;
 
   /// The current list of filter subscriptions.
   List<FilterSubscription> get subscriptions => List.unmodifiable(_subscriptions);
+
+  /// The HTTP options used for future filter-list downloads.
+  FilterHttpOptions get httpOptions => _httpOptions;
 
   /// Initializes the service by parsing subscriptions and starting the background worker isolate.
   ///
@@ -130,6 +136,9 @@ class AdblockService {
     String? storagePath,
   }) {
     _ensureNotDisposed();
+    if (!supportedPlatforms.contains(defaultTargetPlatform)) {
+      throw UnsupportedError('Unsupported platform: $defaultTargetPlatform');
+    }
     if (_isInitialized || _isInitializing) {
       throw StateError('AdblockService is already initialized.');
     }
@@ -166,6 +175,9 @@ class AdblockService {
       _storagePath = storagePath ?? (await getApplicationSupportDirectory()).path;
       if (_isDisposed) return;
 
+      await ScriptletLibrary.instance.load();
+      if (_isDisposed) return;
+
       _jobRunner ??= FilterIsolateManager(
         onEngineReady: _onEngineReady,
         onWorkerEvent: (event) => _observer?.onEvent(event),
@@ -180,6 +192,7 @@ class AdblockService {
       _isInitialized = true;
       _setupTimers();
     } finally {
+      if (!_isInitialized) _acceptsCommands = false;
       _isInitializing = false;
     }
   }
@@ -240,6 +253,24 @@ class AdblockService {
     return _scheduleBuildJob(_subscriptions);
   }
 
+  /// Replaces the HTTP options used by future filter-list downloads.
+  ///
+  /// When [refreshFilters] is `true`, the current subscriptions are immediately
+  /// rebuilt using the new options. Otherwise, the options are applied to the
+  /// next scheduled subscription update.
+  Future<void> updateHttpOptions(
+    FilterHttpOptions httpOptions, {
+    bool refreshFilters = false,
+  }) {
+    _ensureReadyForCommand();
+    _httpOptions = httpOptions;
+
+    if (!refreshFilters) return Future<void>.value();
+
+    isReady.value = false;
+    return _scheduleBuildJob(_subscriptions);
+  }
+
   /// Sends a command to clear the local filter cache. The isolate will delete downloaded files and compiled engines.
   Future<void> clearCache() {
     _ensureReadyForCommand();
@@ -282,6 +313,7 @@ class AdblockService {
       _observer?.onError(
         IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
       );
+      rethrow;
     } finally {
       if (_runningBuildVersion == effectiveVersion) _runningBuildVersion = null;
     }
@@ -301,6 +333,7 @@ class AdblockService {
       _observer?.onError(
         IsolateCrashError('Filter worker job failed', cause: '$error\n$stackTrace'),
       );
+      rethrow;
     }
   }
 
@@ -320,11 +353,10 @@ class AdblockService {
 
     for (final entry in grouped.entries) {
       final interval = entry.key;
-      final subs = List<FilterSubscription>.unmodifiable(entry.value);
 
       _updateTimers.add(
         Timer.periodic(interval, (_) {
-          unawaited(_scheduleBuildJob(subs));
+          unawaited(_scheduleBuildJob(_subscriptions));
         }),
       );
     }

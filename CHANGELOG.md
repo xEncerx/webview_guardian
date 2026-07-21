@@ -1,3 +1,43 @@
+## 0.3.0
+
+### Breaking changes
+
+- Remove the unused `id` and `lastEtag` named parameters from `FilterSubscription.copyWith`.
+- Change `WebView.initialUrl` from `String` to `Uri` so callers provide a parsed initial URL.
+- Limit filter-list proxies to `http://` URLs and reject invalid or unsupported proxy configurations.
+
+### Added
+
+- Support Adblock Plus `#$#` CSS injection rules globally and for domain include/exclude lists.
+- Add `AdblockService.updateHttpOptions` to update filter download headers, proxy, and timeouts at runtime, with an optional immediate filter refresh.
+- Add configurable filter-list response size and concurrent download limits.
+
+### Fixed
+
+- Reject network rules with unknown positive ABP modifiers instead of applying them without their intended constraints.
+- Classify unknown WebView resources as `other` instead of `subdocument` without explicit HTML signals.
+- Preserve every active filter subscription when a periodic rebuild runs.
+- Preserve caller-owned WebView user scripts when Guardian refreshes its host-specific injections.
+- Propagate terminal filter build and cache-clear failures through their public futures.
+- Reject `AdblockService.init()` immediately on unsupported platforms before starting filter jobs.
+- Close worker-owned HTTP clients and reject filter lists that exceed the configured size limit.
+- Recreate the native WebView when its `adblockService` identity changes so initial settings, scripts, and callbacks stay in sync.
+- Load the bundled scriptlet library during adblock initialization and resolve canonical and alias names with or without the `.js` suffix.
+- Preserve scriptlet placeholder sentinels during argument substitution so scriptlets do not return before executing.
+- Execute page-context scriptlets in the page content world instead of an isolated client world.
+- Fix document-start behavior for inline-script aborting, class removal, WebRTC disabling, SmartAdServer, AdFly, and upManager scriptlets.
+
+### Changed
+
+- Make periodic filter updates opt-in by defaulting `FilterSubscription.updateInterval` to `null`.
+- Require every internal `FilterListClient` implementation to dispose its resources asynchronously.
+- Replace the previously bundled uBO scriptlets with independent clean-room implementations to avoid incompatible license terms.
+- Mark the `AdblockService` repository, injection orchestrator, and traffic interceptor accessors as package-internal.
+
+### Performance
+
+- Keep trie-complete `||host^` network rules out of token dispatch and fallback matching to reduce compiled engine size and fallback lookup work.
+
 ## 0.2.1
 
 ### Fixed

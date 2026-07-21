@@ -25,9 +25,23 @@ class HttpFilterListClient implements FilterListClient {
 
     final response = await request.close().timeout(_options.receiveTimeout);
     await _validateSuccessfulResponse(response, uri);
+    if (response.contentLength > _options.maxFilterListBytes) {
+      final socket = await response.detachSocket();
+      socket.destroy();
+      throw _filterListTooLarge(uri);
+    }
 
     final builder = BytesBuilder(copy: false);
-    await response.forEach(builder.add).timeout(_options.receiveTimeout);
+    var bytesRead = 0;
+    await response
+        .forEach((chunk) {
+          bytesRead += chunk.length;
+          if (bytesRead > _options.maxFilterListBytes) {
+            throw _filterListTooLarge(uri);
+          }
+          builder.add(chunk);
+        })
+        .timeout(_options.receiveTimeout);
 
     return FilterFetchResult(bytes: builder.takeBytes(), etag: response.headers.value('etag'));
   }
@@ -45,9 +59,9 @@ class HttpFilterListClient implements FilterListClient {
     return FilterHeadResult(etag: response.headers.value('etag'));
   }
 
-  /// Closes the underlying HTTP client and releases any idle connections.
-  void close({bool force = false}) {
-    _client.close(force: force);
+  @override
+  Future<void> dispose() async {
+    _client.close(force: true);
   }
 
   void _applyHeaders(HttpClientRequest request) {
@@ -60,23 +74,24 @@ class HttpFilterListClient implements FilterListClient {
     }
   }
 
+  HttpException _filterListTooLarge(Uri uri) => HttpException(
+    'Filter list exceeds the configured limit of ${_options.maxFilterListBytes} bytes',
+    uri: uri,
+  );
+
   void _configureProxy(String proxyUrl) {
     final uri = Uri.tryParse(proxyUrl);
-    if (uri == null) return;
+    if (uri == null || uri.scheme.toLowerCase() != 'http' || uri.host.isEmpty) {
+      throw ArgumentError.value(proxyUrl, 'proxy', 'Only valid http:// proxy URLs are supported');
+    }
 
     final host = uri.host;
-    final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+    final port = uri.hasPort ? uri.port : 80;
+    if (port < 1 || port > 65535) {
+      throw ArgumentError.value(proxyUrl, 'proxy', 'Proxy port must be between 1 and 65535');
+    }
 
-    final proxyType = switch (uri.scheme.toLowerCase()) {
-      'socks4' => 'SOCKS4',
-      'socks5' => 'SOCKS5',
-      'socks' => 'SOCKS5',
-      'http' => 'HTTP',
-      'https' => 'HTTPS',
-      _ => 'DIRECT',
-    };
-
-    _client.findProxy = (url) => '$proxyType $host:$port';
+    _client.findProxy = (url) => 'PROXY $host:$port';
 
     if (uri.userInfo.isNotEmpty) {
       final parts = uri.userInfo.split(':');

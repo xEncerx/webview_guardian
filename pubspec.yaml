@@ -1,6 +1,7 @@
 name: webview_guardian
-description: "WebView client for Flutter with built-in adblock functionality."
-version: 0.2.1
+description: Flutter WebView wrapper for Android and Windows with network ad blocking,
+  cosmetic filtering, and scriptlet injection.
+version: 0.3.0
 homepage: https://github.com/xEncerx/webview_guardian
 repository: https://github.com/xEncerx/webview_guardian
 issue_tracker: https://github.com/xEncerx/webview_guardian/issues
@@ -14,6 +15,7 @@ topics:
 
 environment:
   sdk: ^3.8.0
+  flutter: ">=3.32.0"
 
 platforms:
   android:

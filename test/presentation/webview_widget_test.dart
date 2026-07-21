@@ -51,6 +51,8 @@ class _FakeInAppWebViewPlatform extends InAppWebViewPlatform {
 class _FakePlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {
   _FakePlatformInAppWebViewWidget(super.params) : super.implementation();
 
+  bool isDisposed = false;
+
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
 
@@ -59,7 +61,7 @@ class _FakePlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {
       params.controllerFromPlatform!(controller) as T;
 
   @override
-  void dispose() {}
+  void dispose() => isDisposed = true;
 }
 
 void main() {
@@ -83,7 +85,9 @@ void main() {
       service = _FakeAdblockService(_FakeInjectionOrchestrator());
       controller = _MockInAppWebViewController();
 
-      when(() => controller.removeAllUserScripts()).thenAnswer((_) async {});
+      when(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).thenAnswer((_) async {});
       when(
         () => controller.addUserScript(userScript: any(named: 'userScript')),
       ).thenAnswer((_) async {});
@@ -93,13 +97,37 @@ void main() {
       service.dispose();
     });
 
+    testWidgets('uses the initial Uri for the platform request and adblock host', (tester) async {
+      service.ready.value = true;
+      final initialUri = Uri.parse('https://sub.example.com/path?item=1');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: initialUri,
+            adblockService: service,
+          ),
+        ),
+      );
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      final webViewParams = webView.platform.params;
+      final requestedUrl = webViewParams.initialUrlRequest?.url;
+
+      expect(requestedUrl, isNotNull);
+      expect(requestedUrl!.toString(), initialUri.toString());
+      expect(requestedUrl.host, initialUri.host);
+      expect(webViewParams.initialUserScripts, hasLength(1));
+      expect(webViewParams.initialUserScripts!.single.source, contains(initialUri.host));
+    });
+
     testWidgets('retries same-host injection when initial scripts were unavailable', (
       tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -116,7 +144,9 @@ void main() {
       webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
       await tester.pump();
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       verify(() => controller.addUserScript(userScript: any(named: 'userScript'))).called(
         greaterThan(0),
       );
@@ -130,7 +160,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -152,7 +182,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -165,7 +195,9 @@ void main() {
       webViewParams.onLoadStart!(controller, WebUri('https://example.com'));
       await tester.pump();
 
-      verifyNever(() => controller.removeAllUserScripts());
+      verifyNever(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      );
       verifyNever(() => controller.addUserScript(userScript: any(named: 'userScript')));
     });
 
@@ -177,7 +209,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -202,7 +234,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -216,7 +248,9 @@ void main() {
         ),
       );
 
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();
@@ -228,8 +262,8 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: WebView(initialUrl: 'https://example.com'),
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
         ),
       );
 
@@ -254,7 +288,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -265,8 +299,8 @@ void main() {
       expect(webView.platform.params.shouldOverrideUrlLoading, isNotNull);
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: WebView(initialUrl: 'https://example.com'),
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
         ),
       );
 
@@ -279,6 +313,56 @@ void main() {
       expect(webViewParams.shouldOverrideUrlLoading, isNull);
     });
 
+    testWidgets('recreates the platform view only when adblock service identity changes', (
+      tester,
+    ) async {
+      service.ready.value = true;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: Uri.parse('https://example.com'),
+            adblockService: service,
+          ),
+        ),
+      );
+
+      var platformWidget =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+      platformWidget.params.onWebViewCreated!(controller);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(
+            initialUrl: Uri.parse('https://example.com'),
+            adblockService: service,
+          ),
+        ),
+      );
+
+      expect(platformWidget.isDisposed, isFalse);
+      platformWidget =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WebView(initialUrl: Uri.parse('https://example.com')),
+        ),
+      );
+
+      expect(platformWidget.isDisposed, isTrue);
+      final replacement =
+          tester.widget<InAppWebView>(find.byType(InAppWebView)).platform
+              as _FakePlatformInAppWebViewWidget;
+      expect(replacement, isNot(same(platformWidget)));
+      expect(replacement.params.initialUserScripts, isEmpty);
+      expect(replacement.params.shouldInterceptRequest, isNull);
+      expect(replacement.params.shouldOverrideUrlLoading, isNull);
+      expect(() => replacement.params.onWebViewCreated!(controller), returnsNormally);
+    });
+
     testWidgets('updates host scripts before allowing a main-frame navigation', (
       tester,
     ) async {
@@ -287,7 +371,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: WebView(
-            initialUrl: 'https://example.com',
+            initialUrl: Uri.parse('https://example.com'),
             adblockService: service,
           ),
         ),
@@ -309,7 +393,9 @@ void main() {
       );
 
       expect(policy, NavigationActionPolicy.ALLOW);
-      verify(() => controller.removeAllUserScripts()).called(1);
+      verify(
+        () => controller.removeUserScriptsByGroupName(groupName: any(named: 'groupName')),
+      ).called(1);
       final captured = verify(
         () => controller.addUserScript(userScript: captureAny(named: 'userScript')),
       ).captured.cast<UserScript>();

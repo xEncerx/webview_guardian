@@ -17,6 +17,44 @@ class HostnameTrieCompiler {
   /// The root of the trie. Each path from the root to a node represents a reversed hostname pattern.
   final root = RawTrieNode();
 
+  /// Whether the trie can provide the rule's complete candidate coverage without token dispatch.
+  static bool isTrieComplete(FilterRule rule) {
+    final (pattern, isMatchCase) = switch (rule) {
+      final NetworkBlockRule r => (r.pattern, r.isMatchCase),
+      final NetworkExceptionRule r => (r.pattern, r.isMatchCase),
+      _ => (null, false),
+    };
+    if (pattern == null || isMatchCase || pattern.length < 4) return false;
+    if (pattern.codeUnitAt(0) != 124 ||
+        pattern.codeUnitAt(1) != 124 ||
+        pattern.codeUnitAt(pattern.length - 1) != 94) {
+      return false;
+    }
+
+    final hostEnd = pattern.length - 1;
+    if (hostEnd - 2 > 253) return false;
+
+    var labelLength = 0;
+    for (var i = 2; i < hostEnd; i++) {
+      final char = pattern.codeUnitAt(i);
+      if (char == 46) {
+        if (labelLength == 0 || pattern.codeUnitAt(i - 1) == 45) return false;
+        labelLength = 0;
+        continue;
+      }
+
+      final isLowercaseLetter = char >= 97 && char <= 122;
+      final isDigit = char >= 48 && char <= 57;
+      if ((!isLowercaseLetter && !isDigit && char != 45) || (labelLength == 0 && char == 45)) {
+        return false;
+      }
+      labelLength++;
+      if (labelLength > 63) return false;
+    }
+
+    return labelLength > 0 && pattern.codeUnitAt(hostEnd - 1) != 45;
+  }
+
   /// Attempts to add a filter rule to the trie.
   ///
   /// Returns true if the rule was successfully added, false if it was invalid.

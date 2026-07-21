@@ -243,7 +243,8 @@ class EngineSerializer {
       case CssInjectRule():
         writer.writeUint8(_typeCssInject);
         writer.writeString(rule.css);
-        writer.writeNullableString(rule.domain);
+        writer.writeNullableStringList(rule.domains);
+        writer.writeNullableStringList(rule.excludeDomains);
     }
   }
 
@@ -303,9 +304,13 @@ class EngineSerializer {
           args: reader.readStringList(),
         );
       case _typeCssInject:
+        final css = reader.readString();
+        final includeDomains = reader.readNullableStringList();
         return CssInjectRule(
-          css: reader.readString(),
-          domain: reader.readNullableString(),
+          css: css,
+          includeDomains: includeDomains,
+          excludeDomains: reader.readNullableStringList(),
+          domain: includeDomains?.length == 1 ? includeDomains!.first : null,
         );
       default:
         throw FormatException('Unknown rule type: $type');

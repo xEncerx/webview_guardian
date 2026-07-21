@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:webview_guardian/src/data/data.dart';
 import 'package:webview_guardian/src/domain/domain.dart';
@@ -158,13 +160,36 @@ Some random text that is not a valid adblock list
 
       final userScripts = service.orchestrator!.buildUserScripts('unrelated-site.test');
 
-      expect(
-        userScripts.where((script) => script.source.contains('.global-ad')),
-        isNotEmpty,
-      );
+      expect(userScripts.where((script) => script.source.contains('.global-ad')), isNotEmpty);
       expect(
         userScripts.where((script) => script.source.contains('abortOnPropertyRead')),
         isNotEmpty,
+      );
+    });
+
+    test('should inject parsed CSS rules at document start', () async {
+      final cssFilterFile = File('${tempDir.path}/css_filter.txt')
+        ..writeAsStringSync(r'''
+[Adblock Plus 2.0]
+example.com#$#body { overflow: auto !important; }
+''');
+
+      await service.init(
+        subscriptions: [FilterSubscription(url: cssFilterFile.path)],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+
+      final cssScripts = service.orchestrator!
+          .buildUserScripts('sub.example.com')
+          .where((script) => script.injectionTime == UserScriptInjectionTime.AT_DOCUMENT_START)
+          .toList();
+
+      expect(cssScripts, hasLength(1));
+      expect(cssScripts.single.source, contains('body { overflow: auto !important; }'));
+      expect(
+        cssScripts.single.source,
+        isNot(contains('body { overflow: auto !important; } { display: none !important; }')),
       );
     });
 
@@ -188,10 +213,7 @@ example.com##.sponsored
 
       final userScripts = service.orchestrator!.buildUserScripts('example.com');
 
-      expect(
-        userScripts.where((script) => script.source.contains('.sponsored')),
-        isEmpty,
-      );
+      expect(userScripts.where((script) => script.source.contains('.sponsored')), isEmpty);
     });
 
     test('should not crash on invalid filter file and should allow traffic (Resilience)', () async {
@@ -402,9 +424,7 @@ example.com##.sponsored
       expect(
         service.orchestrator!
             .buildUserScripts('example.com')
-            .where(
-              (script) => script.source.contains('.banner'),
-            ),
+            .where((script) => script.source.contains('.banner')),
         isNotEmpty,
       );
 
@@ -426,9 +446,7 @@ example.com##.sponsored
       expect(
         service.orchestrator!
             .buildUserScripts('example.com')
-            .where(
-              (script) => script.source.contains('.banner'),
-            ),
+            .where((script) => script.source.contains('.banner')),
         isEmpty,
       );
     });
@@ -487,11 +505,7 @@ example.com##.sponsored
         updateInterval: const Duration(seconds: 1),
       );
 
-      await service.init(
-        subscriptions: [sub],
-        storagePath: tempDir.path,
-        observer: observer,
-      );
+      await service.init(subscriptions: [sub], storagePath: tempDir.path, observer: observer);
 
       while (!service.isReady.value) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -504,6 +518,33 @@ example.com##.sponsored
 
       final fetchStartedCountAfter = events.whereType<FilterListFetchStarted>().length;
       expect(fetchStartedCountAfter, greaterThan(fetchStartedCountInitial));
+    });
+
+    test('subscriptions do not periodically update by default', () {
+      expect(const FilterSubscription(url: 'filters.txt').updateInterval, isNull);
+    });
+
+    test('timer rebuild includes periodic and non-periodic subscriptions', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      addTearDown(service.dispose);
+      const periodic = FilterSubscription(
+        url: 'periodic.txt',
+        updateInterval: Duration(milliseconds: 1),
+      );
+      const nonPeriodic = FilterSubscription(url: 'non-periodic.txt');
+
+      final initFuture = service.init(
+        subscriptions: const [periodic, nonPeriodic],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+
+      await runner.waitForStartedCount(2).timeout(const Duration(seconds: 5));
+
+      expect(runner.startedSubscriptions[1], const [periodic, nonPeriodic]);
     });
 
     test('should bypass interceptor when isEnabled is false', () async {
@@ -554,10 +595,9 @@ example.com##.sponsored
 
       await Future<void>.delayed(Duration.zero);
 
-      expect(
-        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
-        ['initial.txt'],
-      );
+      expect(runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url), [
+        'initial.txt',
+      ]);
 
       runner.completeCurrent();
       await runner.waitForStartedCount(2);
@@ -566,10 +606,10 @@ example.com##.sponsored
       expect(await _isCompleted(firstUpdate), isFalse);
       expect(await _isCompleted(secondUpdate), isFalse);
 
-      expect(
-        runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url),
-        ['initial.txt', 'second-update.txt'],
-      );
+      expect(runner.startedSubscriptions.map((subscriptions) => subscriptions.single.url), [
+        'initial.txt',
+        'second-update.txt',
+      ]);
 
       runner.completeCurrent();
       await firstUpdate;
@@ -598,13 +638,118 @@ example.com##.sponsored
       await initFuture;
 
       expect(runner.startedStoragePaths, ['initial-storage', 'initial-storage']);
-      expect(
-        runner.startedHttpOptions.map((options) => options.headers['x-request']),
-        ['initial', 'initial'],
-      );
+      expect(runner.startedHttpOptions.map((options) => options.headers['x-request']), [
+        'initial',
+        'initial',
+      ]);
 
       runner.completeCurrent();
       await updateFuture;
+      await runner.waitForIdle();
+      service.dispose();
+    });
+
+    test('updateHttpOptions updates options used by the next subscription update', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      const initialOptions = FilterHttpOptions(headers: {'x-request': 'initial'});
+      const updatedOptions = FilterHttpOptions(
+        headers: {'x-request': 'runtime'},
+        proxy: 'socks5://127.0.0.1:1080',
+      );
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        httpOptions: initialOptions,
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+      await runner.waitForIdle();
+
+      expect(service.httpOptions, same(initialOptions));
+
+      await service.updateHttpOptions(updatedOptions);
+
+      expect(service.httpOptions, same(updatedOptions));
+      expect(runner.startedSubscriptions, hasLength(1));
+
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'updated.txt'),
+      ]);
+      await runner.waitForStartedCount(2);
+
+      expect(runner.startedSubscriptions.last.single.url, 'updated.txt');
+      expect(runner.startedHttpOptions.last, same(updatedOptions));
+
+      runner.completeCurrent();
+      await updateFuture;
+      await runner.waitForIdle();
+      service.dispose();
+    });
+
+    test(
+      'updateHttpOptions with refreshFilters schedules rebuild with current subscriptions',
+      () async {
+        final runner = _ControllableFilterJobRunner();
+        final service = AdblockService.createForTest(jobRunner: runner);
+        const updatedOptions = FilterHttpOptions(headers: {'x-request': 'runtime'});
+
+        final initFuture = service.init(
+          subscriptions: const [FilterSubscription(url: 'initial.txt')],
+          storagePath: tempDir.path,
+        );
+        await runner.waitForStartedCount(1);
+        runner.completeCurrent();
+        await initFuture;
+        await runner.waitForIdle();
+
+        final refreshFuture = service.updateHttpOptions(updatedOptions, refreshFilters: true);
+        await runner.waitForStartedCount(2);
+
+        expect(runner.startedOperations, ['build:initial.txt', 'build:initial.txt']);
+        expect(runner.startedHttpOptions.last, same(updatedOptions));
+        expect(service.isReady.value, isFalse);
+
+        runner.completeCurrent();
+        await refreshFuture;
+        await runner.waitForIdle();
+        service.dispose();
+      },
+    );
+
+    test('updateHttpOptions with refreshFilters replaces pending build options', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      const updatedOptions = FilterHttpOptions(headers: {'x-request': 'runtime'});
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'pending-update.txt'),
+      ]);
+      final refreshFuture = service.updateHttpOptions(updatedOptions, refreshFilters: true);
+
+      await Future<void>.delayed(Duration.zero);
+      expect(runner.startedOperations, ['build:initial.txt']);
+
+      runner.completeCurrent();
+      await runner.waitForStartedCount(2);
+      await initFuture;
+
+      expect(runner.startedOperations, ['build:initial.txt', 'build:pending-update.txt']);
+      expect(runner.startedHttpOptions.last, same(updatedOptions));
+      expect(await _isCompleted(updateFuture), isFalse);
+      expect(await _isCompleted(refreshFuture), isFalse);
+
+      runner.completeCurrent();
+      await updateFuture;
+      await refreshFuture;
       await runner.waitForIdle();
       service.dispose();
     });
@@ -631,10 +776,7 @@ example.com##.sponsored
       await runner.waitForStartedCount(2);
       await initFuture;
 
-      expect(
-        runner.startedOperations,
-        ['build:initial.txt', 'clear', 'build:pending-update.txt'],
-      );
+      expect(runner.startedOperations, ['build:initial.txt', 'clear', 'build:pending-update.txt']);
 
       expect(await _isCompleted(clearFuture), isTrue);
       expect(await _isCompleted(updateFuture), isFalse);
@@ -670,6 +812,115 @@ example.com##.sponsored
       service.dispose();
     });
 
+    test('failed init propagates, rejects commands, and can be retried', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      final errors = <WebViewError>[];
+      final observer = _TestObserver((_) {}, errors.add);
+      final failure = StateError('build failed');
+      addTearDown(service.dispose);
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(1);
+      runner.failCurrent(failure);
+
+      await expectLater(initFuture, throwsA(same(failure)));
+      expect(service.isReady.value, isFalse);
+      expect(
+        () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
+        throwsStateError,
+      );
+      expect(service.clearCache, throwsStateError);
+      expect(errors, hasLength(1));
+      expect(errors.single, isA<IsolateCrashError>());
+
+      final retryFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'retry.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(2);
+      runner.completeCurrent();
+      await retryFuture;
+    });
+
+    test('init rejects unsupported platform before starting a filter job', () async {
+      final runner = _ControllableFilterJobRunner();
+      final platformService = AdblockService.createForTest(jobRunner: runner);
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        platformService.dispose();
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      expect(
+        () {
+          unawaited(
+            platformService.init(
+              subscriptions: const [FilterSubscription(url: 'initial.txt')],
+              storagePath: tempDir.path,
+            ),
+          );
+        },
+        throwsA(
+          isA<UnsupportedError>().having(
+            (error) => error.message,
+            'message',
+            'Unsupported platform: TargetPlatform.iOS',
+          ),
+        ),
+      );
+      expect(runner.startedOperations, isEmpty);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final initFuture = platformService.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+    });
+
+    test('updateSubscriptions and clearCache propagate runner errors', () async {
+      final runner = _ControllableFilterJobRunner();
+      final service = AdblockService.createForTest(jobRunner: runner);
+      final errors = <WebViewError>[];
+      final observer = _TestObserver((_) {}, errors.add);
+      addTearDown(service.dispose);
+
+      final initFuture = service.init(
+        subscriptions: const [FilterSubscription(url: 'initial.txt')],
+        storagePath: tempDir.path,
+        observer: observer,
+      );
+      await runner.waitForStartedCount(1);
+      runner.completeCurrent();
+      await initFuture;
+
+      final buildFailure = StateError('update failed');
+      final updateFuture = service.updateSubscriptions(const [
+        FilterSubscription(url: 'update.txt'),
+      ]);
+      await runner.waitForStartedCount(2);
+      runner.failCurrent(buildFailure);
+      await expectLater(updateFuture, throwsA(same(buildFailure)));
+
+      final clearFailure = StateError('clear failed');
+      runner.holdNextClear();
+      final clearFuture = service.clearCache();
+      await Future<void>.delayed(Duration.zero);
+      runner.failCurrentClear(clearFailure);
+      await expectLater(clearFuture, throwsA(same(clearFailure)));
+
+      expect(errors, hasLength(2));
+      expect(errors, everyElement(isA<IsolateCrashError>()));
+    });
+
     test('throws when used before init or after dispose', () async {
       final runner = _ControllableFilterJobRunner();
       final service = AdblockService.createForTest(jobRunner: runner);
@@ -678,6 +929,7 @@ example.com##.sponsored
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
         throwsStateError,
       );
+      expect(() => service.updateHttpOptions(const FilterHttpOptions()), throwsStateError);
       expect(service.clearCache, throwsStateError);
 
       final initFuture = service.init(
@@ -700,6 +952,7 @@ example.com##.sponsored
         () => service.updateSubscriptions(const [FilterSubscription(url: 'update.txt')]),
         throwsStateError,
       );
+      expect(() => service.updateHttpOptions(const FilterHttpOptions()), throwsStateError);
       expect(service.clearCache, throwsStateError);
       service.dispose();
     });
@@ -736,10 +989,7 @@ example.com##.sponsored
 
       final initFuture = service.init(
         subscriptions: const [
-          FilterSubscription(
-            url: 'initial.txt',
-            updateInterval: Duration(milliseconds: 1),
-          ),
+          FilterSubscription(url: 'initial.txt', updateInterval: Duration(milliseconds: 1)),
         ],
         storagePath: tempDir.path,
       );
@@ -799,7 +1049,9 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     startedSubscriptions.add(List.of(subscriptions));
     startedHttpOptions.add(httpOptions);
     startedStoragePaths.add(storagePath);
-    startedOperations.add('build:${subscriptions.single.url}');
+    startedOperations.add(
+      'build:${subscriptions.map((subscription) => subscription.url).join(',')}',
+    );
     _startedController.add(startedSubscriptions.length);
     _current = Completer<void>();
     return _current!.future.whenComplete(() => _current = null);
@@ -825,6 +1077,12 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     current.complete();
   }
 
+  void failCurrent(Object error) {
+    final current = _current;
+    if (current == null || current.isCompleted) return;
+    current.completeError(error);
+  }
+
   void holdNextClear() {
     _holdNextClear = true;
   }
@@ -833,6 +1091,12 @@ class _ControllableFilterJobRunner implements FilterJobRunner {
     final current = _currentClear;
     if (current == null || current.isCompleted) return;
     current.complete();
+  }
+
+  void failCurrentClear(Object error) {
+    final current = _currentClear;
+    if (current == null || current.isCompleted) return;
+    current.completeError(error);
   }
 
   Future<void> waitForStartedCount(int count) async {

@@ -138,14 +138,16 @@ void main() {
 
   group('FilterRepositoryImpl cosmetic rules', () {
     FilterRepositoryImpl repositoryFor({
-      required Map<String, List<CosmeticHideRule>> hideRules,
+      Map<String, List<CosmeticHideRule>> hideRules = const {},
       Map<String, List<CosmeticExceptionRule>> exceptionRules = const {},
+      Map<String, List<CssInjectRule>> cssRules = const {},
     }) {
       final engineRef = FilterEngineRef(
         CompiledFilterEngine(
           totalRules:
               hideRules.values.fold<int>(0, (sum, rules) => sum + rules.length) +
-              exceptionRules.values.fold<int>(0, (sum, rules) => sum + rules.length),
+              exceptionRules.values.fold<int>(0, (sum, rules) => sum + rules.length) +
+              cssRules.values.fold<int>(0, (sum, rules) => sum + rules.length),
           trieBuffer: Uint32List(1),
           trieRules: const [],
           tokenDispatchTable: const {},
@@ -153,7 +155,7 @@ void main() {
           cosmeticHideRules: hideRules,
           cosmeticExceptionRules: exceptionRules,
           scriptletRules: const {},
-          cssInjectRules: const {},
+          cssInjectRules: cssRules,
         ),
       );
 
@@ -224,6 +226,46 @@ void main() {
 
       expect(ruleSet.genericRules, [genericRule]);
       expect(ruleSet.domainSpecificRules, isEmpty);
+    });
+
+    test('returns scoped and global CSS rules through the domain chain without duplicates', () {
+      const scoped = CssInjectRule(
+        css: 'html { color: red; }',
+        includeDomains: ['example.com'],
+        excludeDomains: ['blocked.example.com'],
+      );
+      const global = CssInjectRule(css: 'body { margin: 0; }');
+      final repository = repositoryFor(
+        cssRules: const {
+          'example.com': [scoped],
+          '': [global],
+          '*': [global],
+        },
+      );
+
+      expect(repository.getCssInjectRules('sub.example.com'), [scoped, global]);
+      expect(repository.getCssInjectRules('blocked.example.com'), [global]);
+      expect(repository.getCssInjectRules('unrelated.test'), [global]);
+    });
+
+    test('preserves exact www CSS domains and exclusions', () {
+      const wwwOnly = CssInjectRule(
+        css: 'body { color: red; }',
+        includeDomains: ['www.example.com'],
+      );
+      const exceptWww = CssInjectRule(
+        css: 'body { color: blue; }',
+        excludeDomains: ['www.example.com'],
+      );
+      final repository = repositoryFor(
+        cssRules: const {
+          'www.example.com': [wwwOnly],
+          '*': [exceptWww],
+        },
+      );
+
+      expect(repository.getCssInjectRules('www.example.com'), [wwwOnly]);
+      expect(repository.getCssInjectRules('example.com'), [exceptWww]);
     });
   });
 }

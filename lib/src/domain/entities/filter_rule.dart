@@ -167,12 +167,8 @@ sealed class _CosmeticRule extends FilterRule {
           _listEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => Object.hash(
-    runtimeType,
-    selector,
-    _listHash(includeDomains),
-    _listHash(excludeDomains),
-  );
+  int get hashCode =>
+      Object.hash(runtimeType, selector, _listHash(includeDomains), _listHash(excludeDomains));
 }
 
 /// A rule that hides elements on a webpage matching a specific CSS selector.
@@ -203,11 +199,7 @@ final class CosmeticExceptionRule extends _CosmeticRule {
 @immutable
 final class ScriptletRule extends FilterRule {
   /// Creates a [ScriptletRule] instance.
-  const ScriptletRule({
-    required this.scriptletName,
-    this.domains,
-    this.args = const [],
-  });
+  const ScriptletRule({required this.scriptletName, this.domains, this.args = const []});
 
   /// The domains for which this rule should be applied. null = global rule.
   final List<String>? domains;
@@ -236,10 +228,22 @@ final class CssInjectRule extends FilterRule {
   /// Creates a [CssInjectRule] instance.
   const CssInjectRule({
     required this.css,
+    List<String>? domains,
+    List<String>? includeDomains,
+    this.excludeDomains,
     this.domain,
-  });
+  }) : includeDomains = includeDomains ?? domains;
 
-  /// The domain for which this rule should be applied.
+  /// The hostnames where this CSS rule may apply. null = global rule.
+  final List<String>? includeDomains;
+
+  /// The hostnames where this CSS rule must not apply.
+  final List<String>? excludeDomains;
+
+  /// Alias for [includeDomains], retained for consistency with cosmetic rules.
+  List<String>? get domains => includeDomains ?? (domain == null ? null : [domain!]);
+
+  /// Legacy single-domain constructor argument.
   final String? domain;
 
   /// The CSS code to inject into the webpage.
@@ -248,8 +252,11 @@ final class CssInjectRule extends FilterRule {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is CssInjectRule && domain == other.domain && css == other.css);
+      (other is CssInjectRule &&
+          css == other.css &&
+          _listEquals(domains, other.domains) &&
+          _listEquals(excludeDomains, other.excludeDomains));
 
   @override
-  int get hashCode => css.hashCode;
+  int get hashCode => Object.hash(css, _listHash(domains), _listHash(excludeDomains));
 }

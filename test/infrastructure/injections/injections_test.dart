@@ -49,17 +49,55 @@ const val = '{{1}}';
       expect(script, contains(r"const val = 'don\'t break\\it';"));
     });
 
-    test('should remove remaining {{n}} tokens if fewer arguments are provided', () {
+    test('preserves the sentinel after replacing a supplied argument', () {
+      const raw = '''
+/// remove-attr.js
+const token = '{{1}}';
+if (token === '' || token === '{{1}}') return;
+''';
+      ScriptletLibrary.instance.parseForTest(raw);
+
+      final script = ScriptletLibrary.instance.buildScript('remove-attr.js', [
+        'data-scriptlet-test',
+      ]);
+      expect(script, contains("const token = 'data-scriptlet-test';"));
+      expect(script, contains("token === '{{1}}'"));
+      expect(script, isNot(contains("token === 'data-scriptlet-test'")));
+    });
+
+    test('uses empty missing arguments only at substitution sites', () {
       const raw = '''
 /// test-missing.js
 const val1 = '{{1}}';
+if (val1 === '{{1}}') return;
 const val2 = '{{2}}';
+if (val2 === '{{2}}') return;
 ''';
       ScriptletLibrary.instance.parseForTest(raw);
 
       final script = ScriptletLibrary.instance.buildScript('test-missing.js', ['val1']);
       expect(script, contains("const val1 = 'val1';"));
+      expect(script, contains("val1 === '{{1}}'"));
       expect(script, contains("const val2 = '';"));
+      expect(script, contains("val2 === '{{2}}'"));
+    });
+
+    test('keeps marker-like argument text opaque', () {
+      const raw = '''
+/// test-marker-argument.js
+const first = '{{1}}';
+const second = '{{2}}';
+if (second === '{{2}}') return;
+''';
+      ScriptletLibrary.instance.parseForTest(raw);
+
+      final script = ScriptletLibrary.instance.buildScript('test-marker-argument.js', [
+        'literal {{2}}',
+        'second-value',
+      ]);
+      expect(script, contains("const first = 'literal {{2}}';"));
+      expect(script, contains("const second = 'second-value';"));
+      expect(script, contains("second === '{{2}}'"));
     });
 
     test('should return null if scriptlet does not exist', () {
@@ -101,6 +139,12 @@ const val2 = '{{2}}';
         expect(result, contains('appendChild(style)'));
       });
 
+      test('JSON-encodes quotes and backslashes in ready-to-inject CSS', () {
+        final result = script.buildScriptFromCss(r'body::before { content: "C:\path"; }');
+
+        expect(result, contains(r'const css = "body::before { content: \"C:\\path\"; }";'));
+      });
+
       test('has proper timing and world', () {
         expect(script.timing, InjectionTiming.atDocumentStart);
         expect(script.world, InjectionWorld.isolated);
@@ -116,9 +160,9 @@ const val2 = '{{2}}';
       });
 
       test('should build a valid mutation observer script', () {
-        when(() => mockRepo.getCosmeticRules('example.com')).thenReturn([
-          const CosmeticHideRule(selector: '.dynamic-ad'),
-        ]);
+        when(
+          () => mockRepo.getCosmeticRules('example.com'),
+        ).thenReturn([const CosmeticHideRule(selector: '.dynamic-ad')]);
 
         final result = script.buildScript('example.com', mockRepo);
         expect(result, isNotNull);
@@ -171,6 +215,7 @@ const val2 = '{{2}}';
 
     setUp(() {
       mockRepo = MockFilterRepository();
+      when(() => mockRepo.getCssInjectRules(any())).thenReturn([]);
       orchestrator = InjectionOrchestrator(mockRepo);
       ScriptletLibrary.instance.clearForTest();
       ScriptletLibrary.instance.parseForTest('/// fake-scriptlet.js\nconsole.log();');
@@ -265,9 +310,9 @@ const val2 = '{{2}}';
       when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
         const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
       );
-      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
-        const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
-      ]);
+      when(
+        () => mockRepo.getScriptletRules('example.com'),
+      ).thenReturn([const ScriptletRule(scriptletName: 'fake-scriptlet.js')]);
 
       final userScripts = orchestrator.buildUserScripts('example.com');
 
@@ -283,7 +328,30 @@ const val2 = '{{2}}';
 
       final scriptletScript = userScripts[2];
       expect(scriptletScript.injectionTime, UserScriptInjectionTime.AT_DOCUMENT_START);
-      expect(scriptletScript.contentWorld, ContentWorld.DEFAULT_CLIENT);
+      expect(scriptletScript.contentWorld, ContentWorld.PAGE);
+    });
+
+    test('combines cosmetic hides and raw CSS injection without wrapping injected CSS', () {
+      when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
+        const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
+      );
+      when(
+        () => mockRepo.getCssInjectRules('example.com'),
+      ).thenReturn([const CssInjectRule(css: 'body { overflow: auto !important; }')]);
+      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([]);
+
+      final documentStartScripts = orchestrator
+          .buildUserScripts('example.com')
+          .where((script) => script.injectionTime == UserScriptInjectionTime.AT_DOCUMENT_START)
+          .toList();
+
+      expect(documentStartScripts, hasLength(1));
+      expect(documentStartScripts.single.source, contains('.banner { display: none !important; }'));
+      expect(documentStartScripts.single.source, contains('body { overflow: auto !important; }'));
+      expect(
+        documentStartScripts.single.source,
+        isNot(contains('body { overflow: auto !important; } { display: none !important; }')),
+      );
     });
 
     test('emits injection events for built user scripts without duplicating cosmetic rules', () {
@@ -292,9 +360,9 @@ const val2 = '{{2}}';
       when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
         const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
       );
-      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
-        const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
-      ]);
+      when(
+        () => mockRepo.getScriptletRules('example.com'),
+      ).thenReturn([const ScriptletRule(scriptletName: 'fake-scriptlet.js')]);
 
       final userScripts = orchestrator.buildUserScripts('example.com');
 
@@ -320,9 +388,9 @@ const val2 = '{{2}}';
       when(() => mockRepo.getCosmeticRuleSet('example.com')).thenReturn(
         const CosmeticRuleSet(domainSpecificRules: [CosmeticHideRule(selector: '.banner')]),
       );
-      when(() => mockRepo.getScriptletRules('example.com')).thenReturn([
-        const ScriptletRule(scriptletName: 'fake-scriptlet.js'),
-      ]);
+      when(
+        () => mockRepo.getScriptletRules('example.com'),
+      ).thenReturn([const ScriptletRule(scriptletName: 'fake-scriptlet.js')]);
 
       final userScripts = orchestrator.buildUserScripts('example.com');
 
@@ -332,9 +400,7 @@ const val2 = '{{2}}';
     });
 
     test('should return empty list if no rules are generated', () {
-      when(() => mockRepo.getCosmeticRuleSet('clean-site.com')).thenReturn(
-        const CosmeticRuleSet(),
-      );
+      when(() => mockRepo.getCosmeticRuleSet('clean-site.com')).thenReturn(const CosmeticRuleSet());
       when(() => mockRepo.getScriptletRules('clean-site.com')).thenReturn([]);
 
       final userScripts = orchestrator.buildUserScripts('clean-site.com');

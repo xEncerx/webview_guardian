@@ -16,9 +16,9 @@ class BrowserTab extends StatefulWidget {
 }
 
 class _BrowserTabState extends State<BrowserTab> {
-  static const _initialUrl = 'https://example.com';
+  static final Uri _initialUrl = Uri.parse('https://example.com');
 
-  final _addressController = TextEditingController(text: _initialUrl);
+  final _addressController = TextEditingController(text: _initialUrl.toString());
   WebViewController? _webViewController;
   int _progress = 0;
   bool _canGoBack = false;
